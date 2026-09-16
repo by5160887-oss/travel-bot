@@ -67,5 +67,22 @@ function answer(q){const s=q.toLowerCase();const hit=KB.find(x=>x.keys.some(k=>s
 כדי לענות נכון, כתוב את שם הספק או המלון, היעד, התאריכים, הרכב הנוסעים וגילאי הילדים. אם מדובר בזכויות, ציין גם את מסלול הטיסה והיכן נרכשה ההזמנה.
 
 לא אמציא כלל כללי כשנדרש אישור רשמי.`, 'bot','מחיר, זמינות, תפוסה, חוק ומדיניות חייבים אימות מול מקור רשמי ועדכני.')}
-const form=document.getElementById('form'),q=document.getElementById('q'),messages=document.getElementById('messages');form.onsubmit=e=>{e.preventDefault();let v=q.value.trim();if(!v)return;add(v,'user');q.value='';setTimeout(()=>answer(v),250)};document.querySelectorAll('.chip').forEach(b=>b.onclick=()=>{q.value=b.textContent;form.requestSubmit()});
+const form=document.getElementById('form'),q=document.getElementById('q'),messages=document.getElementById('messages');const history=[];
+async function askAI(v){
+history.push({role:'user',content:v});
+try{
+const ctrl=new AbortController();const timer=setTimeout(()=>ctrl.abort(),20000);
+const r=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({messages:history.slice(-12)}),signal:ctrl.signal});
+clearTimeout(timer);
+if(!r.ok)throw 0;
+const d=await r.json();
+if(!d||typeof d.reply!=='string'||!d.reply.trim())throw 0;
+history.push({role:'assistant',content:d.reply});
+add(d.reply,'bot');
+}catch(e){
+history.pop();
+setTimeout(()=>answer(v),250);
+}
+}
+form.onsubmit=e=>{e.preventDefault();let v=q.value.trim();if(!v)return;add(v,'user');q.value='';askAI(v)};document.querySelectorAll('.chip').forEach(b=>b.onclick=()=>{q.value=b.textContent;form.requestSubmit()});
 </script></body></html>
