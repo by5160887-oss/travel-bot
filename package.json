@@ -1,0 +1,8 @@
+{
+  "name": "travel-bot",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test tests/chat.test.mjs tests/pwa.test.mjs"
+  }
+}

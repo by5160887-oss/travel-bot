@@ -1,0 +1,7 @@
+name = "travel-bot"
+compatibility_date = "2026-09-16"
+
+# Static chat files are served straight from the repo root; the Worker only
+# handles POST /api/chat. Secrets: `npx wrangler secret put GEMINI_API_KEY`.
+[assets]
+directory = "./"
