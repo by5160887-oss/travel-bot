@@ -32,3 +32,22 @@ Notes: the Gemini free tier allows ~500 requests/day for Flash-Lite models;
 beyond that the endpoint returns 429 and the chat falls back to the built-in
 knowledge base. Free-tier prompts may be used by Google to improve its
 products — do not send client personal data through the chat.
+
+## Installable app (PWA)
+
+The chat is installable on Android and iPhone straight from the browser — no
+app store, no publication cost:
+
+- `manifest.webmanifest` + `icons/` — standalone display, Hebrew/RTL metadata,
+  maskable icon.
+- `sw.js` — service worker that caches ONLY the static app shell (HTML,
+  manifest, icons). Requests to `/api/` bypass the cache entirely, so no
+  question or answer is ever stored, and the API key stays server-side.
+  Without network, the cached shell still opens and answers from the built-in
+  knowledge base.
+- `tests/pwa.test.mjs` — asserts the manifest is installable, the icons exist,
+  and the service worker's `/api/` bypass structurally precedes all cache
+  reads/writes.
+
+Install: open the deployed URL in Chrome (Android) → "Add to Home screen";
+or in Safari (iPhone) → Share → "Add to Home Screen".
