@@ -2,6 +2,7 @@ name = "travel-bot-yehuda"
 compatibility_date = "2026-09-16"
 
 # Static chat files are served straight from the repo root; the Worker only
-# handles POST /api/chat. Secrets: `npx wrangler secret put GEMINI_API_KEY`.
+# handles POST /api/chat. Deploys run via Cloudflare Workers Builds (git).
+# Secret GEMINI_API_KEY is managed in the Cloudflare dashboard.
 [assets]
 directory = "./"
