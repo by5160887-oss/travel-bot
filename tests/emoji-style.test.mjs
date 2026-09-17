@@ -8,12 +8,13 @@ function instructionFor(question) {
 
 test("everyday answers get tasteful, measured emoji guidance", () => {
   const prompt = instructionFor("מה ההבדל בין חצי פנסיון לכל כלול?");
-  assert.match(prompt, /אמוג'ים רלוונטיים/);
+  assert.match(prompt, /אמוג'ים: בתשובות רגילות שלב אחד עד שלושה/);
   assert.match(prompt, /בטוב טעם ובמידה/);
-  assert.match(prompt, /אחד עד שלושה לתשובה/);
+  assert.match(prompt, /אחד עד שלושה אמוג'ים רלוונטיים/);
   assert.match(prompt, /אינו מחליף מילים, מספרים או מקורות/);
-  assert.match(prompt, /אובדן או נזק לכבודה וזכויות נוסעים/);
-  assert.match(prompt, /גם לא אמוג'י נושא תמים/);
+  assert.match(prompt, /יוצא דופן אחד/);
+  assert.match(prompt, /אובדן או נזק לכבודה, זכויות נוסעים/);
+  assert.match(prompt, /התשובה ללא אמוג'ים כלל/);
 });
 
 test("sensitive topics stay emoji-free and the serious-tone rule stays intact", () => {
