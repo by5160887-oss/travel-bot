@@ -155,3 +155,30 @@ test("lodging types remain distinct", () => {
   assert.equal(inferLodgingType({ title: "Address Residence", content: "" }), "residence");
   assert.equal(inferLodgingType({ title: "Armani Hotel", content: "" }), "hotel");
 });
+
+test("exact Hebrew singular hotel proximity prompt is structurally detected", () => {
+  const exact = [{ role: "user", content: "המלץ על מלון ליד בורג׳ חליפה" }];
+  assert.equal(isHotelProximityQuery(exact), true);
+  assert.equal(needsLiveResearch(exact), true);
+});
+
+test("stable terminology with singular hotel remains outside proximity filtering", () => {
+  const stable = [{ role: "user", content: "מה פירוש HB במלון?" }];
+  assert.equal(isHotelProximityQuery(stable), false);
+  assert.equal(needsLiveResearch(stable), false);
+});
+
+test("exact Hebrew singular proximity flow cannot pass OTA/social/review or unsupported distances", () => {
+  const exact = [{ role: "user", content: "המלץ על מלון ליד בורג׳ חליפה" }];
+  assert.equal(isHotelProximityQuery(exact), true);
+  const sources = normalizeSources([
+    { url: "https://www.booking.com/hotel/ae/x", title: "Hotel X 50 meters", content: "50 meters from Burj Khalifa" },
+    { url: "https://www.instagram.com/reel/x", title: "Hotel Y", content: "2 minutes walk" },
+    { url: "https://www.telegraph.co.uk/travel/x", title: "Hotel review", content: "100 yards" },
+    { url: "https://hotel.example/location", title: "Armani Hotel", content: "Hotel inside Burj Khalifa. 40 meters from attraction." },
+  ]);
+  const kept = filterProximitySources(sources);
+  assert.deepEqual(kept.map((source) => source.sourceType), ["other"]);
+  assert.doesNotMatch(sourceContext(kept), /(?:50 meters|2 minutes|100 yards|40 meters)/);
+  assert.match(sourceContext(kept), /סוג לינה: hotel/);
+});
