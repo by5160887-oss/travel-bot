@@ -110,7 +110,7 @@ export function directAuthoritativeUnknownDateSources(sources) {
 export function hasDirectAuthoritativeUnknownDateEvidence(sources) { return directAuthoritativeUnknownDateSources(sources).length > 0; }
 export function isHotelProximityQuery(messages) {
   const q = latestQuestion(messages);
-  return /(?:מלונ|hotel)/i.test(q) && /(?:ליד|קרוב|בסביבת|מרחק|near|close|distance|walking|בורג[׳'״]? חליפה|burj khalifa)/i.test(q);
+  return /(?:מלון|מלונות|מלוני|hotel)/i.test(q) && /(?:ליד|קרוב|בסביבת|מרחק|near|close|distance|walking|בורג[׳'״]? חליפה|burj khalifa)/i.test(q);
 }
 export function inferLodgingType(source) {
   const text = (source.title || "") + " " + (source.content || "");
