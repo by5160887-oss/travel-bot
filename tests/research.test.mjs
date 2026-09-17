@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { needsLiveResearch, buildSearchQuery, normalizeSources, searchWeb, sourceContext, classifySource, isUnknownDatePassportQuery, hasDirectAuthoritativeUnknownDateEvidence } from "../research.js";
+import { needsLiveResearch, buildSearchQuery, normalizeSources, searchWeb, sourceContext, classifySource, isUnknownDatePassportQuery, hasDirectAuthoritativeUnknownDateEvidence, directAuthoritativeUnknownDateSources, isHotelProximityQuery, inferLodgingType, filterProximitySources } from "../research.js";
 import { buildGeminiRequest, SYSTEM_PROMPT } from "../chat-core.js";
 
 const scenarios = [
@@ -119,4 +119,39 @@ test("source context exposes source type to model", () => {
 test("client receives source quality type rather than an inflated official label", async () => {
   const source = normalizeSources([{ title: "Booking", url: "https://www.booking.com/hotel/x", content: "x" }])[0];
   assert.equal(source.sourceType, "ota");
+});
+
+test("structural passport gate rejects generic government text even when it says day/month", () => {
+  const weak = normalizeSources([{ url: "https://www.gov.il/he/pages/uae", title: "UAE", content: "ההסכם נכנס ביום 10 בחודש ינואר. כניסה לאיחוד האמירויות פטורה מויזה." }]);
+  assert.deepEqual(directAuthoritativeUnknownDateSources(weak), []);
+});
+
+test("structural passport gate retains only direct authoritative 00/00 evidence", () => {
+  const mixed = normalizeSources([
+    { url: "https://www.instagram.com/reel/x", title: "social", content: "Dubai passport 00/00" },
+    { url: "https://www.emirates.com/rules", title: "airline", content: "UAE passport rule: date of birth 00/00 is not accepted" },
+  ]);
+  const kept = directAuthoritativeUnknownDateSources(mixed);
+  assert.equal(kept.length, 1);
+  assert.equal(kept[0].sourceType, "airline");
+});
+
+test("structural proximity filter removes OTA/social and strips exact distances from non-map text", () => {
+  const raw = normalizeSources([
+    { url: "https://www.booking.com/hotel/x", title: "Hotel X 50 meters from Burj Khalifa", content: "Hotel X is 50 meters away" },
+    { url: "https://www.instagram.com/reel/x", title: "Hotel reel", content: "2 minutes walk" },
+    { url: "https://hotel.example/location", title: "Hotel Example", content: "Our hotel is 100 meters from Burj Khalifa. Five-star hotel with pool." },
+  ]);
+  const kept = filterProximitySources(raw);
+  assert.equal(kept.length, 1);
+  assert.equal(kept[0].lodgingType, "hotel");
+  assert.doesNotMatch(kept[0].content, /100 meters/);
+  assert.match(kept[0].content, /Five-star hotel/);
+});
+
+test("lodging types remain distinct", () => {
+  assert.equal(inferLodgingType({ title: "Palm Holiday Home", content: "" }), "holiday_home");
+  assert.equal(inferLodgingType({ title: "Central Serviced Apartment", content: "" }), "serviced_apartment");
+  assert.equal(inferLodgingType({ title: "Address Residence", content: "" }), "residence");
+  assert.equal(inferLodgingType({ title: "Armani Hotel", content: "" }), "hotel");
 });
