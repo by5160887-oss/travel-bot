@@ -54,7 +54,9 @@ test("regression: base baggage question then specific follow-up — the follow-u
     assert.equal(res.status, 200);
     const payload = await res.json();
     // 1. The model's specific answer is returned, not the canned checklist.
-    assert.equal(payload.reply, FOLLOWUP_A);
+    assert.ok(payload.reply.startsWith(FOLLOWUP_A));
+    assert.match(payload.reply, /טיפ לסוכן:/);
+    assert.match(payload.reply, /שאלת המשך ללקוח:/);
     assert.notEqual(payload.reply, BASE_A);
     // 2. The newest question is the final content sent upstream...
     const sent = capture.body.contents;
