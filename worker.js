@@ -1,3 +1,4 @@
+import { needsLiveResearch, buildSearchQuery, searchWeb } from "./research.js";
 // Travel Bot — AI chat backend as a Cloudflare Worker (free tier, no card).
 //
 // Activation (owner steps, NOT done in this PR): create a free Cloudflare
@@ -43,13 +44,20 @@ export async function handleChat(request, env) {
   if (prepared.error) return json({ error: prepared.error }, prepared.status);
 
   const model = env.GEMINI_MODEL || DEFAULT_MODEL;
-  const result = await callGemini({ apiKey, model, messages: prepared.messages });
+  let sources = [];
+  let researchStatus = "not_needed";
+  if (needsLiveResearch(prepared.messages)) {
+    const search = await searchWeb({ query: buildSearchQuery(prepared.messages), apiKey: env.TAVILY_API_KEY });
+    if (search.ok) { sources = search.sources; researchStatus = "live"; }
+    else researchStatus = search.error;
+  }
+  const result = await callGemini({ apiKey, model, messages: prepared.messages, sources });
   if (!result.ok) {
     const payload = { error: result.error };
     if (result.upstreamStatus) payload.status = result.upstreamStatus;
     return json(payload, result.status);
   }
-  return json(result.truncated ? { reply: result.reply, truncated: true } : { reply: result.reply }, 200);
+  return json({ reply: result.reply, ...(result.truncated ? { truncated: true } : {}), researchStatus, sources: sources.map(({ title, url }) => ({ title, url })) }, 200);
 }
 
 export default {
