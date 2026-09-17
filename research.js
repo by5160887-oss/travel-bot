@@ -30,10 +30,12 @@ export function buildSearchQuery(messages) {
 
 const SOCIAL_DOMAINS = new Set(["facebook.com", "www.facebook.com", "instagram.com", "www.instagram.com", "tiktok.com", "www.tiktok.com"]);
 const OTA_DOMAINS = new Set(["booking.com", "www.booking.com", "agoda.com", "www.agoda.com", "expedia.com", "www.expedia.com", "tripadvisor.com", "www.tripadvisor.com", "trivago.com", "www.trivago.com", "destinia.com", "www.destinia.com"]);
+const MAP_DOMAINS = new Set(["maps.google.com", "maps.apple.com", "www.openstreetmap.org"]);
 const REVIEW_DOMAINS = new Set(["tripadvisor.co.il", "www.tripadvisor.co.il", "telegraph.co.uk", "www.telegraph.co.uk"]);
 
 export function classifySource(url) {
   const host = new URL(url).hostname.toLowerCase();
+  if (MAP_DOMAINS.has(host) || (host.endsWith(".google.com") && new URL(url).pathname.includes("/maps"))) return "maps";
   if (SOCIAL_DOMAINS.has(host)) return "social";
   if (OTA_DOMAINS.has(host)) return "ota";
   if (REVIEW_DOMAINS.has(host)) return "review";
@@ -100,14 +102,33 @@ export function isUnknownDatePassportQuery(messages) {
   return /(?:דרכון|passport)/i.test(q) && /(?:00[\/.-]?00|000|תאריך[^\n]{0,30}00)/i.test(q);
 }
 
-export function hasDirectAuthoritativeUnknownDateEvidence(sources) {
-  return sources.some((s) =>
-    ["government", "airline"].includes(s.sourceType) &&
-    /(?:00[\/.-]?00|000|unknown date|unknown day|unknown month|יום|חודש)/i.test(s.content) &&
-    /(?:איחוד האמירויות|דובאי|UAE|United Arab Emirates|Dubai)/i.test(s.content)
-  );
+export function directAuthoritativeUnknownDateSources(sources) {
+  const exactRule = /(?:00[\/.-]00|00[\/.-]00[\/.-](?:0000|\d{4})|date of birth[^.\n]{0,80}(?:00|unknown)|unknown (?:day|month|date)[^.\n]{0,80}(?:passport|birth)|(?:יום|חודש)[^.\n]{0,80}(?:00|לא ידוע))/i;
+  const destination = /(?:איחוד האמירויות|דובאי|UAE|United Arab Emirates|Dubai)/i;
+  return sources.filter((source) => ["government", "airline"].includes(source.sourceType) && exactRule.test(source.content) && destination.test(source.content));
+}
+export function hasDirectAuthoritativeUnknownDateEvidence(sources) { return directAuthoritativeUnknownDateSources(sources).length > 0; }
+export function isHotelProximityQuery(messages) {
+  const q = latestQuestion(messages);
+  return /(?:מלונ|hotel)/i.test(q) && /(?:ליד|קרוב|בסביבת|מרחק|near|close|distance|walking|בורג[׳'״]? חליפה|burj khalifa)/i.test(q);
+}
+export function inferLodgingType(source) {
+  const text = (source.title || "") + " " + (source.content || "");
+  if (/holiday home|דירת נופש/i.test(text)) return "holiday_home";
+  if (/serviced apartment|דירת שירות/i.test(text)) return "serviced_apartment";
+  if (/residen(?:ce|tial)|מגורים|רזידנס/i.test(text)) return "residence";
+  if (/hotel|מלון/i.test(text)) return "hotel";
+  return "unspecified";
+}
+export function filterProximitySources(sources) {
+  return sources.filter((source) => !["ota", "social", "review"].includes(source.sourceType)).map((source) => {
+    const lodgingType = inferLodgingType(source);
+    if (source.sourceType === "maps") return { ...source, lodgingType };
+    const content = source.content.replace(/[^.\n]*(?:\d+(?:[.,]\d+)?\s*(?:m|km|meters?|metres?|yards?|מטר(?:ים)?|ק[״"]?מ)|\d+\s*(?:minutes?|דקות?)\s*(?:walk|walking|הליכה))[^.\n]*[.\n]?/gi, "").trim();
+    return { ...source, content, lodgingType };
+  }).filter((source) => source.content || source.sourceType === "maps");
 }
 
 export function sourceContext(sources) {
-  return sources.map((s, i) => `[${i + 1}] ${s.title}\nסוג מקור: ${s.sourceType || classifySource(s.url)}\nURL: ${s.url}\nקטע מקור: ${s.content || "(ללא קטע טקסט)"}`).join("\n\n");
+  return sources.map((s, i) => `[${i + 1}] ${s.title}\nסוג מקור: ${s.sourceType || classifySource(s.url)}${s.lodgingType ? `\nסוג לינה: ${s.lodgingType}` : ""}\nURL: ${s.url}\nקטע מקור: ${s.content || "(ללא קטע טקסט)"}`).join("\n\n");
 }
