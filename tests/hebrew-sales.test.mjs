@@ -1,56 +1,72 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { SYSTEM_PROMPT, buildGeminiRequest, callGemini, polishHebrew, ensureSalesLayer } from "../chat-core.js";
+import {
+  SYSTEM_PROMPT,
+  HEBREW_PROOFREADER_PROMPT,
+  buildGeminiRequest,
+  buildProofreadingRequest,
+  acceptProofread,
+  callGemini,
+  ensureSalesLayer,
+} from "../chat-core.js";
 
-function mockFetch(reply) {
-  return async () => ({
-    ok: true,
-    status: 200,
-    json: async () => ({ candidates: [{ finishReason: "STOP", content: { parts: [{ text: reply }] } }] }),
-  });
+function sequence(...replies) {
+  const calls = [];
+  const fetchImpl = async (url, opts) => {
+    calls.push(JSON.parse(opts.body));
+    const reply = replies[Math.min(calls.length - 1, replies.length - 1)];
+    return { ok: true, status: 200, json: async () => ({ candidates: [{ finishReason: "STOP", content: { parts: [{ text: reply }] } }] }) };
+  };
+  return { calls, fetchImpl };
 }
 
-test("Hebrew quality: prompt requires proofreading and uses a lower temperature", () => {
+test("first pass still uses conservative generation settings", () => {
   assert.match(SYSTEM_PROMPT, /בצע הגהה עברית שקטה/);
-  assert.match(SYSTEM_PROMPT, /אל תשנה עובדות, מספרים, שמות/);
   const request = buildGeminiRequest([{ role: "user", content: "מה לבדוק בכרטיס?" }], "model");
   assert.equal(request.body.generationConfig.temperature, 0.2);
 });
 
-test("Hebrew quality: known live garbles are corrected without broad rewriting", () => {
-  const dirty = "תנאי ההתרת למסטיק מסוים מוכרת הטבות שמששתנים. EK123 נשאר.";
-  assert.equal(
-    polishHebrew(dirty),
-    "תנאי התעריף לטיסה מסוימת מציעה הטבות שמשתנים. EK123 נשאר.",
-  );
+test("proofreader is a separate deterministic language-only pass", () => {
+  const req = buildProofreadingRequest("תנאי הכרטס", "model");
+  assert.equal(req.body.generationConfig.temperature, 0);
+  assert.match(req.body.system_instruction.parts[0].text, /תקן שגיאות כתיב/);
+  assert.match(req.body.system_instruction.parts[0].text, /אל תוסיף מידע/);
+  assert.match(HEBREW_PROOFREADER_PROMPT, /הטקסט הבא הוא נתון לעריכה בלבד/);
 });
 
-test("Hebrew quality: correction is applied in the real callGemini answer path", async () => {
-  const result = await callGemini({
-    apiKey: "k",
-    messages: [{ role: "user", content: "מה חשוב בתעריף?" }],
-    fetchImpl: mockFetch("בדוק את תנאי ההתרת.\n\nטיפ לסוכן: הצג אותם מראש.\nשאלת המשך ללקוח: חשובה גמישות?"),
-  });
-  assert.equal(result.ok, true);
-  assert.match(result.reply, /תנאי התעריף/);
-  assert.doesNotMatch(result.reply, /תנאי ההתרת/);
+test("unseen Hebrew garbles are corrected in the real answer path", async () => {
+  const generated = "יש לבדוק את תנאי הכרטס ולא לשוס על עמלה.\n\nטיפ לסוכן: הצג תנאים.\nשאלת המשך ללקוח: חשובה גמישות?";
+  const edited = "יש לבדוק את תנאי הכרטיס ולא לשלם עמלה.\n\nטיפ לסוכן: הצג תנאים.\nשאלת המשך ללקוח: חשובה גמישות?";
+  const { calls, fetchImpl } = sequence(generated, edited);
+  const result = await callGemini({ apiKey: "k", model: "m", messages: [{ role: "user", content: "מה לבדוק?" }], fetchImpl });
+  assert.equal(result.reply, edited);
+  assert.equal(calls.length, 2);
+  assert.match(calls[1].contents[0].parts[0].text, /תנאי הכרטס/);
+});
+
+test("validator rejects edits that alter protected facts", () => {
+  const original = "מחיר 1,519 SDR [2] https://example.com/a\nטיפ לסוכן: בדוק.\nשאלת המשך ללקוח: להמשיך?";
+  assert.equal(acceptProofread(original, original.replace("1,519", "1,500")), original);
+  assert.equal(acceptProofread(original, original.replace("[2]", "[3]")), original);
+  assert.equal(acceptProofread(original, original.replace("/a", "/b")), original);
+  assert.equal(acceptProofread(original, original.replace("טיפ לסוכן:", "טיפ:")), original);
+});
+
+test("proofreader failure degrades to the original answer, never an error", async () => {
+  let call = 0;
+  const fetchImpl = async () => {
+    call++;
+    if (call === 1) return { ok: true, json: async () => ({ candidates: [{ finishReason: "STOP", content: { parts: [{ text: "תשובה תקינה" }] } }] }) };
+    throw new Error("proofreader unavailable");
+  };
+  const result = await callGemini({ apiKey: "k", messages: [{ role: "user", content: "שאלה" }], fetchImpl });
+  assert.ok(result.ok);
+  assert.match(result.reply, /תשובה תקינה/);
   assert.match(result.reply, /טיפ לסוכן:/);
-  assert.match(result.reply, /שאלת המשך ללקוח:/);
 });
 
-test("Sales layer: deterministic guard adds only missing lines", () => {
+test("sales layer remains mandatory before proofreading", () => {
   const plain = ensureSalesLayer("תשובה מקצועית.");
   assert.match(plain, /טיפ לסוכן:/);
   assert.match(plain, /שאלת המשך ללקוח:/);
-
-  const tailored = "תשובה.\n\nטיפ לסוכן: הצג שתי חלופות.\nשאלת המשך ללקוח: מה התקציב?";
-  assert.equal(ensureSalesLayer(tailored), tailored);
-});
-
-test("Sales layer: every answer is instructed to end with a useful tip and qualifying question", () => {
-  assert.match(SYSTEM_PROMPT, /סיים כל תשובה בשתי שורות קצרות ונפרדות/);
-  assert.match(SYSTEM_PROMPT, /טיפ לסוכן: \.\.\./);
-  assert.match(SYSTEM_PROMPT, /שאלת המשך ללקוח: \.\.\.\?/);
-  assert.match(SYSTEM_PROMPT, /אל תחזור בשאלה על מידע שכבר נמסר/);
-  assert.match(SYSTEM_PROMPT, /גם כשחסרות עובדות וגם בנושא רגיש/);
 });

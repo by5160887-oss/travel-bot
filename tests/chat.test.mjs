@@ -25,9 +25,11 @@ function post(payload) {
 function withMockUpstream(capture, replyText = FOLLOWUP_A) {
   const real = globalThis.fetch;
   globalThis.fetch = async (url, opts) => {
+    capture.calls ||= [];
+    capture.calls.push({ url, headers: opts.headers, body: JSON.parse(opts.body) });
     capture.url = url;
     capture.headers = opts.headers;
-    capture.body = JSON.parse(opts.body);
+    capture.body = capture.calls[0].body;
     return {
       ok: true,
       status: 200,
@@ -59,7 +61,7 @@ test("regression: base baggage question then specific follow-up — the follow-u
     assert.match(payload.reply, /שאלת המשך ללקוח:/);
     assert.notEqual(payload.reply, BASE_A);
     // 2. The newest question is the final content sent upstream...
-    const sent = capture.body.contents;
+    const sent = capture.calls[0].body.contents;
     assert.equal(sent[sent.length - 1].role, "user");
     assert.equal(sent[sent.length - 1].parts[0].text, FOLLOWUP_Q);
     // 3. ...with the earlier turns present as context (assistant→model role).
