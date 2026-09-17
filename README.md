@@ -6,19 +6,37 @@ Travel Bot - Hebrew travel knowledge assistant
 - `1-index.html` — the chat UI. It first tries the AI endpoint (`POST /api/chat`)
   with the conversation history; if the endpoint is missing, unreachable, or
   returns an error (e.g. static hosting, no API key, or the free daily quota
-  is exhausted), it falls back to the built-in keyword knowledge base, so the
-  page keeps working exactly as before in any static deployment.
-- `worker.js` — a Cloudflare Worker (free tier, no card required) that calls
-  the Google Gemini API. Model defaults to `gemini-3.5-flash-lite` (free-tier
-  model per the Google AI docs; override with the `GEMINI_MODEL` var). The
-  API key lives only as a Worker secret (`GEMINI_API_KEY`) and is sent as a
-  header — it never reaches the browser or the URL.
+  is exhausted), it falls back to the built-in keyword knowledge base — and
+  every such fallback answer is visibly labelled "תשובה מבסיס הידע המובנה —
+  ה-AI אינו זמין כרגע", so a canned answer is never mistaken for the AI.
+  A reply the server flags `truncated` is labelled as cut off and marked in
+  the conversation history, never rendered or stored as complete. Messages
+  over 8,000 characters are rejected with a visible notice (HTTP 413), never
+  silently chopped.
+- `chat-core.js` — the single shared chat core used by BOTH backends: the
+  Hebrew system prompt, the Gemini request builder, and the `callGemini`
+  logic. `callGemini` always checks `candidates[0].finishReason`: on
+  `MAX_TOKENS` it sends one server-side continuation turn and joins the
+  pieces, and if the answer is still incomplete it returns
+  `truncated: true` so the client can label it. Output headroom is
+  3,072 tokens (a 10-section analysis used to be cut by the old 800 cap).
+- `worker.js` / `api/chat.js` — thin platform adapters over `chat-core.js`
+  for Cloudflare Workers (free tier, no card required) and Vercel. The model
+  defaults to `gemini-3.5-flash-lite` (free-tier model per the Google AI
+  docs; override with the `GEMINI_MODEL` var). The API key lives only as a
+  server-side secret (`GEMINI_API_KEY`) and is sent as a header — it never
+  reaches the browser or the URL.
 - `wrangler.toml` — Worker config; static files are served from the repo root
   via Workers Static Assets, so the HTML and the API live on one free host.
-- `tests/chat.test.mjs` — zero-dependency regression tests (`npm test`,
-  Node 18+). Covers the reported bug scenario: a base baggage question
-  followed by a materially different follow-up must get its own specific
-  answer, with history passed as context and the newest question last.
+- `tests/chat.test.mjs`, `tests/pwa.test.mjs`, `tests/legal-regression.test.mjs`
+  — zero-dependency regression tests (`npm test`, Node 18+). Cover the
+  reported bug scenario (a base baggage question followed by a materially
+  different follow-up), the legal-reliability audit (the 10-part two-airline
+  baggage scenario: complete non-truncated answers, MAX_TOKENS continuation,
+  loud 413 on over-long messages, the three distinct Montreal Convention
+  clocks, the per-passenger — never per-kg — compensation cap, PIR nuance,
+  and the one-ticket/two-ticket fork), a drift guard that keeps both backends
+  on the shared core, and the PWA shell.
 
 ## Activation (owner steps, not part of this PR)
 
