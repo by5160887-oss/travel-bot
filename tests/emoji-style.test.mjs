@@ -12,6 +12,9 @@ test("everyday answers get tasteful, measured emoji guidance", () => {
   assert.match(prompt, /בטוב טעם ובמידה/);
   assert.match(prompt, /אחד עד שלושה לתשובה/);
   assert.match(prompt, /אינו מחליף מילים, מספרים או מקורות/);
+  assert.match(prompt, /רק בתשובות רגילות וקלילות/);
+  assert.match(prompt, /אובדן או נזק לכבודה וזכויות נוסעים/);
+  assert.match(prompt, /גם לא אמוג'י נושא תמים/);
 });
 
 test("sensitive topics stay emoji-free and the serious-tone rule stays intact", () => {
