@@ -32,7 +32,7 @@ test("manifest is installable: standalone, icons 192+512+maskable, start_url, rt
 
 test("service worker NEVER caches AI traffic: /api/ bypass comes before any cache logic", () => {
   const apiBypass = sw.indexOf('/api/');
-  const cachePut = sw.indexOf("c.put(");
+  const cachePut = sw.indexOf("cache.put(");
   const cacheMatch = sw.indexOf("caches.match(");
   assert.ok(apiBypass > -1, "no /api/ rule found");
   assert.ok(apiBypass < cachePut, "/api/ bypass must precede cache writes");
@@ -48,4 +48,22 @@ test("service worker caches only the static shell, not chat content", () => {
   assert.match(shell, /icon-192\.png/);
   assert.doesNotMatch(shell, /api|chat\.json|history/i);
   assert.match(sw, /caches\.delete/, "old caches must be cleaned on activate");
+});
+
+test("PWA uses versioned network-first navigation with offline fallback", () => {
+  assert.match(sw, /travel-bot-shell-v3/);
+  assert.match(sw, /request\.mode === "navigate"/);
+  const nav = sw.indexOf('request.mode === "navigate"');
+  const network = sw.indexOf('fetch(request)', nav);
+  const cache = sw.indexOf('caches.match(request', nav);
+  assert.ok(network > nav && network < cache, "navigation must try network before cache");
+  assert.match(sw, /caches\.match\("\.\/1-index\.html"\)/);
+});
+
+test("PWA exposes a visible update and refresh path", () => {
+  assert.match(sw, /TRAVEL_BOT_UPDATED/);
+  assert.match(html, /id="updateNotice"/);
+  assert.match(html, /רענון עכשיו/);
+  assert.match(html, /controllerchange/);
+  assert.match(html, /location\.reload\(\)/);
 });
