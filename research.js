@@ -5,13 +5,14 @@
 export const SEARCH_ENDPOINT = "https://api.tavily.com/search";
 export const MAX_SEARCH_RESULTS = 6;
 export const SEARCH_TIMEOUT_MS = 9000;
+export const OWNER_TRAVELOR_URL = "https://www.travelor.com/he?fid=84016";
 
 const LIVE_PATTERNS = [
   /כשר|kosher|חב["״'׳]?ד|chabad|בורג[׳'״]? חליפה|burj khalifa|מלונ(?:ות|י|ון) (?:ליד|קרוב|בסביבת)|hotel(?:s)? (?:near|close to)/i,
   /ביקור(?:ו|וֹ)?ת|review|מתקנ|facility|מטבח|kitchen|בריכה|pool/i,
   /צ[׳']ק[ -]?אין|check[ -]?in/i,
   /דרכון|כניסה ל|ויזה|passport|entry requirement|visa|תוקף/i,
-  /מחיר|זמינות|availability|price|מדיניות|policy|עדכני|כיום|עכשיו/i,
+  /מחיר|זמינות|availability|price|מדיניות|policy|עדכני|כיום|עכשיו|אצלי|באתר שלי|האתר שלי|טרוולאור|travelor/i,
 ];
 
 export function needsLiveResearch(messages) {
@@ -23,18 +24,39 @@ export function latestQuestion(messages) {
   return [...(messages || [])].reverse().find((m) => m?.role === "user")?.content?.trim() || "";
 }
 
+export function isOwnerTravelorQuery(messages) {
+  return /(?:אצלי|באתר שלי|האתר שלי|טרוולאור|travelor)/i.test(latestQuestion(messages));
+}
+
 export function buildSearchQuery(messages) {
   const question = latestQuestion(messages);
-  return `${question}\nהעדף מקורות רשמיים ועדכניים; למלון: אתר המלון ומקור כשרות מוסמך; לכניסה: רשות הגירה/שגרירות; לחברת תעופה: אתר החברה.`;
+  const ownerSite = isOwnerTravelorQuery(messages) ? `\nמקור הבעלות המועדף למחיר וזמינות: ${OWNER_TRAVELOR_URL} (שמור fid=84016 בכל קישור).` : "";
+  return `${question}${ownerSite}\nהעדף מקורות רשמיים ועדכניים; למלון: אתר המלון ומקור כשרות מוסמך; לכניסה: רשות הגירה/שגרירות; לחברת תעופה: אתר החברה.`;
 }
 
 const SOCIAL_DOMAINS = new Set(["facebook.com", "www.facebook.com", "instagram.com", "www.instagram.com", "tiktok.com", "www.tiktok.com"]);
 const OTA_DOMAINS = new Set(["booking.com", "www.booking.com", "agoda.com", "www.agoda.com", "expedia.com", "www.expedia.com", "tripadvisor.com", "www.tripadvisor.com", "trivago.com", "www.trivago.com", "destinia.com", "www.destinia.com"]);
 const MAP_DOMAINS = new Set(["maps.google.com", "maps.apple.com", "www.openstreetmap.org"]);
 const REVIEW_DOMAINS = new Set(["tripadvisor.co.il", "www.tripadvisor.co.il", "telegraph.co.uk", "www.telegraph.co.uk"]);
+// Deny-by-default: a domain is never promoted to an official hotel source merely
+// because a search snippet calls it official. Add only manually verified owners.
+const HOTEL_OFFICIAL_DOMAINS = new Set([
+  "www.armanihotels.com", "armanihotels.com",
+  "www.addresshotels.com", "addresshotels.com",
+  "www.tajhotels.com", "tajhotels.com",
+]);
+const KOSHER_AUTHORITY_DOMAINS = new Set(["www.ok.org", "ok.org", "www.oukosher.org", "oukosher.org", "www.star-k.org", "star-k.org"]);
+
+function isOwnerTravelorUrl(url) {
+  const parsed = new URL(url);
+  return (parsed.hostname === "travelor.com" || parsed.hostname === "www.travelor.com") && parsed.pathname === "/he" && parsed.searchParams.get("fid") === "84016";
+}
 
 export function classifySource(url) {
   const host = new URL(url).hostname.toLowerCase();
+  if (isOwnerTravelorUrl(url)) return "owner_travelor";
+  if (HOTEL_OFFICIAL_DOMAINS.has(host)) return "hotel_official";
+  if (KOSHER_AUTHORITY_DOMAINS.has(host)) return "kosher_certifier";
   if (MAP_DOMAINS.has(host) || (host.endsWith(".google.com") && new URL(url).pathname.includes("/maps"))) return "maps";
   if (SOCIAL_DOMAINS.has(host)) return "social";
   if (OTA_DOMAINS.has(host)) return "ota";
@@ -97,6 +119,27 @@ export async function searchWeb({ query, apiKey, fetchImpl, timeoutMs = SEARCH_T
   }
 }
 
+
+export function isHotelRecommendationQuery(messages) {
+  const q = latestQuestion(messages);
+  return /(?:מלון|מלונות|מלוני|hotel|כשר|kosher|חב[״׳"']?ד|chabad)/i.test(q) && !/(?:מה פירוש|מה ההבדל|what (?:does|is)|meaning).*(?:HB|BB|RO|FB)/i.test(q);
+}
+
+export function filterHotelRecommendationSources(sources, messages) {
+  const q = latestQuestion(messages);
+  const ownerTravelor = isOwnerTravelorQuery(messages);
+  const proximity = isHotelProximityQuery(messages);
+  const kosher = /(?:כשר|kosher)/i.test(q);
+  const allowed = new Set(["hotel_official"]);
+  if (proximity) allowed.add("maps");
+  if (kosher) { allowed.add("kosher_certifier"); allowed.add("community_official"); }
+  if (ownerTravelor) allowed.add("owner_travelor");
+  return sources.filter((source) => allowed.has(source.sourceType)).map((source) => ({
+    ...source,
+    ...(source.sourceType === "owner_travelor" ? { sourceLabel: "באתר שלך" } : {}),
+  }));
+}
+
 export function isUnknownDatePassportQuery(messages) {
   const q = latestQuestion(messages);
   return /(?:דרכון|passport)/i.test(q) && /(?:00[\/.-]?00|000|תאריך[^\n]{0,30}00)/i.test(q);
@@ -130,5 +173,5 @@ export function filterProximitySources(sources) {
 }
 
 export function sourceContext(sources) {
-  return sources.map((s, i) => `[${i + 1}] ${s.title}\nסוג מקור: ${s.sourceType || classifySource(s.url)}${s.lodgingType ? `\nסוג לינה: ${s.lodgingType}` : ""}\nURL: ${s.url}\nקטע מקור: ${s.content || "(ללא קטע טקסט)"}`).join("\n\n");
+  return sources.map((s, i) => `[${i + 1}] ${s.title}\nסוג מקור: ${s.sourceType || classifySource(s.url)}${s.sourceLabel ? `\nתווית הצגה: ${s.sourceLabel}` : ""}${s.lodgingType ? `\nסוג לינה: ${s.lodgingType}` : ""}\nURL: ${s.url}\nקטע מקור: ${s.content || "(ללא קטע טקסט)"}`).join("\n\n");
 }
