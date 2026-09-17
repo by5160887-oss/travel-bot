@@ -116,9 +116,16 @@ test("normalizeMessages: caps history at the 12 newest messages and enforces alt
   assert.deepEqual(merged, [{ role: "user", content: "a\nb" }]);
 });
 
-test("normalizeMessages: per-message length cap", () => {
+test("over-long messages are rejected loudly (413), never silently chopped", async () => {
+  const res = await handleChat(
+    post({ messages: [{ role: "user", content: "x".repeat(9000) }] }),
+    { GEMINI_API_KEY: "k" },
+  );
+  assert.equal(res.status, 413);
+  assert.equal((await res.json()).error, "message_too_long");
+  // Content under the limit is preserved intact by normalizeMessages.
   const out = normalizeMessages([{ role: "user", content: "x".repeat(5000) }]);
-  assert.equal(out[0].content.length, 2000);
+  assert.equal(out[0].content.length, 5000);
 });
 
 test("upstream quota exhaustion (429) maps to 502 rate_limited so the client falls back", async () => {
