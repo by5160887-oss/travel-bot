@@ -67,3 +67,10 @@ test("PWA exposes a visible update and refresh path", () => {
   assert.match(html, /controllerchange/);
   assert.match(html, /location\.reload\(\)/);
 });
+
+
+test("client honors the exact owner Travelor source label without trusting arbitrary labels", () => {
+  assert.match(html, /owner_travelor:"באתר שלך"/);
+  assert.match(html, /item\.sourceType==="owner_travelor"&&item\.sourceLabel==="באתר שלך"/);
+  assert.doesNotMatch(html, /sourceLabel=item\.sourceLabel\|\|/);
+});
