@@ -155,4 +155,4 @@ export async function callGemini({ apiKey, model = DEFAULT_MODEL, messages, sour
       { role: "user", content: CONTINUATION_PROMPT },
     ];
   }
-}ree, 
+}
