@@ -60,6 +60,34 @@ export const SYSTEM_PROMPT = `אתה Travel Bot — עוזר ידע מקצועי
 // MAX_TOKENS finish — see callGemini).
 export const CONTINUATION_PROMPT = "המשך בדיוק מאותה נקודה, בלי לחזור על מה שכבר כתבת.";
 
+
+// Sensitive-topic detector + deterministic emoji strip. The system prompt
+// asks the model to keep sensitive answers emoji-free, but live verification
+// showed the model still decorates baggage-loss / legal-deadline answers.
+// This is the hard guarantee: when the conversation touches a sensitive
+// topic, emojis are removed from the reply server-side, no matter what the
+// model produced. Checked against ALL user turns in the kept history — a
+// serious thread stays serious for short follow-ups too.
+const SENSITIVE_PATTERN =
+  /תביע|פיצוי|מונטריאול|אמנת |אובדן|אבדה|אבד|ניזוק|נזק|עיכוב|איחור|בטיחות|חירום|אלימות|מצוקה|סיכון|סכנה|פגיעה|תאונה|בריאות|רפואי|נגישות|אפליה|זכויות נוסע|זכויותיו|זכויותי|כבודה|מזווד/i;
+
+export function isSensitiveConversation(messages) {
+  if (!Array.isArray(messages)) return false;
+  return messages.some((m) => m && m.role === "user" && typeof m.content === "string" && SENSITIVE_PATTERN.test(m.content));
+}
+
+const EMOJI_PATTERN = /\p{Extended_Pictographic}(\uFE0F)?(\u200D\p{Extended_Pictographic}\uFE0F?)*/gu;
+
+export function stripEmojis(text) {
+  if (typeof text !== "string" || !text) return text;
+  return text
+    .replace(EMOJI_PATTERN, "")
+    .replace(/[ \t]+([.,!?:;\)])/g, "$1")
+    .replace(/([ \t]){2,}/g, " ")
+    .replace(/[ \t]+\n/g, "\n")
+    .trim();
+}
+
 // Normalize an arbitrary client-sent history into a safe shape:
 // user/assistant roles only, alternating (consecutive same-role messages are
 // merged), starting with a user message, capped in count. Message CONTENT is
@@ -151,7 +179,8 @@ export async function callGemini({ apiKey, model = DEFAULT_MODEL, messages, sour
     if (!piece && !combined) return { ok: false, status: 502, error: "empty_upstream" };
     combined = combined ? combined + "\n" + piece : piece;
     if (finishReason !== "MAX_TOKENS" || attempt === MAX_CONTINUATIONS) {
-      return { ok: true, reply: combined, truncated: finishReason === "MAX_TOKENS" };
+      const reply = isSensitiveConversation(messages) ? stripEmojis(combined) : combined;
+      return { ok: true, reply, truncated: finishReason === "MAX_TOKENS" };
     }
     working = [
       ...working,
