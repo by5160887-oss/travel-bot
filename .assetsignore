@@ -1,0 +1,2 @@
+# Vercel-only serverless functions; keep them out of the Cloudflare Worker assets.
+api/
