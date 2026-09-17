@@ -20,6 +20,8 @@ import {
   prepareChat,
   callGemini,
   ensureSalesLayer,
+  isPromptInjectionAttempt,
+  PROMPT_INJECTION_REPLY,
 } from "./chat-core.js";
 
 // Re-exported for the regression tests (tests/chat.test.mjs imports these
@@ -43,6 +45,11 @@ export async function handleChat(request, env) {
   try { body = await request.json(); } catch { return json({ error: "bad_json" }, 400); }
   const prepared = prepareChat(body);
   if (prepared.error) return json({ error: prepared.error }, prepared.status);
+
+  if (isPromptInjectionAttempt(prepared.messages)) {
+    const reply = ensureSalesLayer(PROMPT_INJECTION_REPLY);
+    return json({ reply, researchStatus: "blocked_prompt_injection", sources: [] }, 200);
+  }
 
   const model = env.GEMINI_MODEL || DEFAULT_MODEL;
   let sources = [];
