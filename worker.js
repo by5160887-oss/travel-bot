@@ -1,4 +1,4 @@
-import { needsLiveResearch, buildSearchQuery, searchWeb, isUnknownDatePassportQuery, hasDirectAuthoritativeUnknownDateEvidence } from "./research.js";
+import { needsLiveResearch, buildSearchQuery, searchWeb, isUnknownDatePassportQuery, directAuthoritativeUnknownDateSources, isHotelProximityQuery, filterProximitySources } from "./research.js";
 // Travel Bot — AI chat backend as a Cloudflare Worker (free tier, no card).
 //
 // Activation (owner steps, NOT done in this PR): create a free Cloudflare
@@ -50,9 +50,13 @@ export async function handleChat(request, env) {
     const search = await searchWeb({ query: buildSearchQuery(prepared.messages), apiKey: env.TAVILY_API_KEY });
     if (search.ok) {
       sources = search.sources;
-      if (isUnknownDatePassportQuery(prepared.messages) && !hasDirectAuthoritativeUnknownDateEvidence(sources)) {
-        sources = [];
-        researchStatus = "insufficient_authoritative_evidence";
+      if (isUnknownDatePassportQuery(prepared.messages)) {
+        sources = directAuthoritativeUnknownDateSources(sources);
+        if (!sources.length) { return json({ reply: "אין בידי מקור ממשלתי או חברת תעופה שתומך ישירות בכלל 00/00 עבור המקרה הזה. לכן איני יכול לקבוע אם הנוסע יורשה להיכנס. יש לאמת מול רשות האוכלוסין, נציגות איחוד האמירויות וחברת התעופה.", researchStatus: "insufficient_authoritative_evidence", sources: [] }, 200); }
+      }
+      if (isHotelProximityQuery(prepared.messages)) {
+        sources = filterProximitySources(sources);
+        researchStatus = sources.length ? "live_proximity_without_unverified_distance" : "insufficient_location_evidence";
       } else researchStatus = "live";
     } else researchStatus = search.error;
   }
