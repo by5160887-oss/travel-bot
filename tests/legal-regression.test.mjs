@@ -117,7 +117,7 @@ test("finishReason MAX_TOKENS triggers one server-side continuation and joins th
     assert.match(payload.reply, /טיפ לסוכן:/);
     assert.match(payload.reply, /שאלת המשך ללקוח:/);
     assert.equal(payload.truncated, undefined);
-    assert.equal(calls.length, 2);
+    assert.equal(calls.length, 3);
     // The continuation turn carries the partial answer back as a model turn.
     const cont = calls[1].body.contents;
     assert.equal(cont[cont.length - 2].role, "model");
