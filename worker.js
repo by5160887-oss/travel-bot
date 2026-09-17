@@ -19,6 +19,7 @@ import {
   buildGeminiRequest,
   prepareChat,
   callGemini,
+  ensureSalesLayer,
 } from "./chat-core.js";
 
 // Re-exported for the regression tests (tests/chat.test.mjs imports these
@@ -52,7 +53,7 @@ export async function handleChat(request, env) {
       sources = search.sources;
       if (isUnknownDatePassportQuery(prepared.messages)) {
         sources = directAuthoritativeUnknownDateSources(sources);
-        if (!sources.length) { return json({ reply: "אין בידי מקור ממשלתי או חברת תעופה שתומך ישירות בכלל 00/00 עבור המקרה הזה. לכן איני יכול לקבוע אם הנוסע יורשה להיכנס. יש לאמת מול רשות האוכלוסין, נציגות איחוד האמירויות וחברת התעופה.", researchStatus: "insufficient_authoritative_evidence", sources: [] }, 200); }
+        if (!sources.length) { return json({ reply: ensureSalesLayer("אין בידי מקור ממשלתי או חברת תעופה שתומך ישירות בכלל 00/00 עבור המקרה הזה. לכן איני יכול לקבוע אם הנוסע יורשה להיכנס. יש לאמת מול רשות האוכלוסין, נציגות איחוד האמירויות וחברת התעופה."), researchStatus: "insufficient_authoritative_evidence", sources: [] }, 200); }
       }
       if (isHotelRecommendationQuery(prepared.messages)) sources = filterHotelRecommendationSources(sources, prepared.messages);
       if (isHotelProximityQuery(prepared.messages)) {

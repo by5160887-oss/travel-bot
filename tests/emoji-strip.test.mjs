@@ -36,7 +36,9 @@ test("everyday answers keep their emojis untouched", async () => {
     messages: [{ role: "user", content: "מה ההבדל בין חצי פנסיון לכל כלול?" }],
   });
   assert.ok(res.ok);
-  assert.equal(res.reply, modelReply);
+  assert.ok(res.reply.startsWith(modelReply));
+  assert.match(res.reply, /טיפ לסוכן:/);
+  assert.match(res.reply, /שאלת המשך ללקוח:/);
 });
 
 test("a sensitive earlier turn keeps short follow-ups emoji-free", async () => {

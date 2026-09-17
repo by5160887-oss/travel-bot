@@ -7,7 +7,7 @@ import { needsLiveResearch, buildSearchQuery, searchWeb, isUnknownDatePassportQu
 // All chat logic lives in ../chat-core.js, shared verbatim with the Cloudflare
 // Worker so the two backends cannot drift apart.
 
-import { DEFAULT_MODEL, prepareChat, callGemini } from "../chat-core.js";
+import { DEFAULT_MODEL, prepareChat, callGemini, ensureSalesLayer } from "../chat-core.js";
 
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "method_not_allowed" });
@@ -31,7 +31,7 @@ export default async function handler(req, res) {
       sources = search.sources;
       if (isUnknownDatePassportQuery(prepared.messages)) {
         sources = directAuthoritativeUnknownDateSources(sources);
-        if (!sources.length) { return res.status(200).json({ reply: "אין בידי מקור ממשלתי או חברת תעופה שתומך ישירות בכלל 00/00 עבור המקרה הזה. לכן איני יכול לקבוע אם הנוסע יורשה להיכנס. יש לאמת מול רשות האוכלוסין, נציגות איחוד האמירויות וחברת התעופה.", researchStatus: "insufficient_authoritative_evidence", sources: [] }); }
+        if (!sources.length) { return res.status(200).json({ reply: ensureSalesLayer("אין בידי מקור ממשלתי או חברת תעופה שתומך ישירות בכלל 00/00 עבור המקרה הזה. לכן איני יכול לקבוע אם הנוסע יורשה להיכנס. יש לאמת מול רשות האוכלוסין, נציגות איחוד האמירויות וחברת התעופה."), researchStatus: "insufficient_authoritative_evidence", sources: [] }); }
       }
       if (isHotelRecommendationQuery(prepared.messages)) sources = filterHotelRecommendationSources(sources, prepared.messages);
       if (isHotelProximityQuery(prepared.messages)) {
