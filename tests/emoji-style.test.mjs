@@ -23,7 +23,8 @@ test("sensitive topics stay emoji-free and the serious-tone rule stays intact", 
   assert.match(prompt, /טון רציני, ברור ואמפתי/);
   assert.match(prompt, /אין להשתמש בהומור/);
   assert.match(prompt, /קריצה תיירותית/);
-  assert.match(prompt, /ואין לשלב אמוג'ים כלל/);
+  assert.match(prompt, /אין לשלב אמוג'ים כלל/);
+  assert.match(prompt, /תביעות, פיצויים, אובדן או נזק לכבודה/);
 });
 
 // The numbered deployment copies must remain byte-identical to their canonical sources.
