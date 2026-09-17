@@ -69,3 +69,24 @@ app store, no publication cost:
 
 Install: open the deployed URL in Chrome (Android) → "Add to Home screen";
 or in Safari (iPhone) → Share → "Add to Home Screen".
+
+## Live research layer (feature/live-research-layer, not deployed)
+
+Questions whose answers can change - hotels, kosher certification, Chabad proximity,
+facilities/reviews, airline online check-in, passport and entry rules, prices and
+availability - first call Tavily Search from the server. The default is Tavily's
+free keyless mode: no account, card or secret. An optional `TAVILY_API_KEY` can be
+stored as a Cloudflare/Vercel server secret for the documented free 1,000-credit
+monthly tier; it is never sent to the browser or committed.
+
+The model receives numbered HTTPS sources and must separate general knowledge from
+facts checked now, cite `[n]`, prefer official sources, and decline unsupported
+claims. The response also carries structured source titles/URLs, which the client
+renders as clickable links. Search failure is surfaced visibly; it must not be
+mistaken for a live-source answer. Search result text is untrusted evidence and any
+instructions embedded in it are ignored.
+
+This branch does not claim live inventory or rates. A price or availability claim
+still requires the supplier's dated inventory/rate page for the exact dates, party
+and child ages. Likewise, Chabad proximity, kosher certification and an in-room
+kitchen remain separate facts.
