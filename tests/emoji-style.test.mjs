@@ -12,6 +12,9 @@ test("everyday answers get tasteful, measured emoji guidance", () => {
   assert.match(prompt, /בטוב טעם ובמידה/);
   assert.match(prompt, /אחד עד שלושה לתשובה/);
   assert.match(prompt, /אינו מחליף מילים, מספרים או מקורות/);
+  // The example list must NOT map baggage to an emoji: a 🧳 example pulls
+  // sensitive baggage-loss legal answers toward an emoji (live-verified leak).
+  assert.doesNotMatch(prompt, /🧳/);
 });
 
 test("sensitive topics stay emoji-free and the serious-tone rule stays intact", () => {
@@ -20,7 +23,8 @@ test("sensitive topics stay emoji-free and the serious-tone rule stays intact", 
   assert.match(prompt, /טון רציני, ברור ואמפתי/);
   assert.match(prompt, /אין להשתמש בהומור/);
   assert.match(prompt, /קריצה תיירותית/);
-  assert.match(prompt, /ואין לשלב אמוג'ים כלל/);
+  assert.match(prompt, /אין לשלב אמוג'ים כלל/);
+  assert.match(prompt, /תביעות, פיצויים, אובדן או נזק לכבודה/);
 });
 
 // The numbered deployment copies must remain byte-identical to their canonical sources.
