@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { needsLiveResearch, buildSearchQuery, normalizeSources, searchWeb, sourceContext, classifySource, isUnknownDatePassportQuery, hasDirectAuthoritativeUnknownDateEvidence, directAuthoritativeUnknownDateSources, isHotelProximityQuery, inferLodgingType, filterProximitySources } from "../research.js";
+import { needsLiveResearch, buildSearchQuery, normalizeSources, searchWeb, sourceContext, classifySource, isUnknownDatePassportQuery, hasDirectAuthoritativeUnknownDateEvidence, directAuthoritativeUnknownDateSources, isHotelProximityQuery, inferLodgingType, filterProximitySources, OWNER_TRAVELOR_URL, isOwnerTravelorQuery, isHotelRecommendationQuery, filterHotelRecommendationSources } from "../research.js";
 import { buildGeminiRequest, SYSTEM_PROMPT } from "../chat-core.js";
 
 const scenarios = [
@@ -181,4 +181,45 @@ test("exact Hebrew singular proximity flow cannot pass OTA/social/review or unsu
   assert.deepEqual(kept.map((source) => source.sourceType), ["other"]);
   assert.doesNotMatch(sourceContext(kept), /(?:50 meters|2 minutes|100 yards|40 meters)/);
   assert.match(sourceContext(kept), /סוג לינה: hotel/);
+});
+
+
+test("exact Burj recommendation denies OTA, aggregator, social, review and unknown sources", () => {
+  const exact = [{ role: "user", content: "המלץ על מלון ליד בורג׳ חליפה" }];
+  const raw = normalizeSources([
+    { url: "https://www.trivago.co.il/he/opr/x", title: "Trivago", content: "Armani Hotel near Burj Khalifa" },
+    { url: "https://www.blik.co.il/hotels", title: "Blik", content: "Hotels" },
+    { url: "https://gouae.co.il/hotels", title: "Go UAE", content: "Hotels downtown" },
+    { url: "https://www.instagram.com/reel/x", title: "Social", content: "hotel" },
+    { url: "https://www.armanihotels.com/en/hotels/armani-hotel-dubai/", title: "Armani Hotel Dubai", content: "Official hotel page" },
+    { url: "https://maps.google.com/?q=Armani+Hotel+Dubai", title: "Map", content: "Mapped location" },
+    { url: "https://www.telegraph.co.uk/travel/x", title: "Review", content: "hotel" },
+  ]);
+  const kept = filterHotelRecommendationSources(raw, exact);
+  assert.deepEqual(kept.map((s) => s.sourceType), ["hotel_official", "maps"]);
+  assert.equal(isHotelRecommendationQuery(exact), true);
+});
+
+test("Yehuda Travelor query preserves exact affiliate URL and labels owner facts", () => {
+  const messages = [{ role: "user", content: "בדוק זמינות באתר שלי" }];
+  assert.equal(isOwnerTravelorQuery(messages), true);
+  assert.equal(needsLiveResearch(messages), true);
+  assert.match(buildSearchQuery(messages), /https:\/\/www\.travelor\.com\/he\?fid=84016/);
+  const raw = normalizeSources([
+    { url: OWNER_TRAVELOR_URL, title: "Travelor", content: "מחיר וזמינות" },
+    { url: "https://www.travelor.com/he", title: "Travelor generic", content: "מחיר" },
+    { url: "https://www.booking.com/hotel/x", title: "Booking", content: "availability" },
+  ]);
+  const kept = filterHotelRecommendationSources(raw, messages);
+  assert.equal(kept.length, 1);
+  assert.equal(kept[0].url, OWNER_TRAVELOR_URL);
+  assert.equal(kept[0].sourceType, "owner_travelor");
+  assert.equal(kept[0].sourceLabel, "באתר שלך");
+  assert.match(sourceContext(kept), /תווית הצגה: באתר שלך/);
+});
+
+test("generic Travelor URL or wrong affiliate id is not Yehuda's owner source", () => {
+  assert.equal(classifySource("https://www.travelor.com/he"), "other");
+  assert.equal(classifySource("https://www.travelor.com/he?fid=999"), "other");
+  assert.equal(classifySource(OWNER_TRAVELOR_URL), "owner_travelor");
 });
