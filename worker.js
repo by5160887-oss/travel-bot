@@ -1,4 +1,4 @@
-import { needsLiveResearch, buildSearchQuery, searchWeb, isUnknownDatePassportQuery, directAuthoritativeUnknownDateSources, isHotelProximityQuery, filterProximitySources } from "./research.js";
+import { needsLiveResearch, buildSearchQuery, searchWeb, isUnknownDatePassportQuery, directAuthoritativeUnknownDateSources, isHotelProximityQuery, filterProximitySources, isHotelRecommendationQuery, filterHotelRecommendationSources } from "./research.js";
 // Travel Bot — AI chat backend as a Cloudflare Worker (free tier, no card).
 //
 // Activation (owner steps, NOT done in this PR): create a free Cloudflare
@@ -54,6 +54,7 @@ export async function handleChat(request, env) {
         sources = directAuthoritativeUnknownDateSources(sources);
         if (!sources.length) { return json({ reply: "אין בידי מקור ממשלתי או חברת תעופה שתומך ישירות בכלל 00/00 עבור המקרה הזה. לכן איני יכול לקבוע אם הנוסע יורשה להיכנס. יש לאמת מול רשות האוכלוסין, נציגות איחוד האמירויות וחברת התעופה.", researchStatus: "insufficient_authoritative_evidence", sources: [] }, 200); }
       }
+      if (isHotelRecommendationQuery(prepared.messages)) sources = filterHotelRecommendationSources(sources, prepared.messages);
       if (isHotelProximityQuery(prepared.messages)) {
         sources = filterProximitySources(sources);
         researchStatus = sources.length ? "live_proximity_without_unverified_distance" : "insufficient_location_evidence";
@@ -66,7 +67,7 @@ export async function handleChat(request, env) {
     if (result.upstreamStatus) payload.status = result.upstreamStatus;
     return json(payload, result.status);
   }
-  return json({ reply: result.reply, ...(result.truncated ? { truncated: true } : {}), researchStatus, sources: sources.map(({ title, url, sourceType }) => ({ title, url, sourceType })) }, 200);
+  return json({ reply: result.reply, ...(result.truncated ? { truncated: true } : {}), researchStatus, sources: sources.map(({ title, url, sourceType, sourceLabel }) => ({ title, url, sourceType, ...(sourceLabel ? { sourceLabel } : {}) })) }, 200);
 }
 
 export default {
