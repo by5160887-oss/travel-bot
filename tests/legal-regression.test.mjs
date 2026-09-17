@@ -207,6 +207,7 @@ test("client: KB fallback is visibly labelled, truncation and 413 are handled, i
   assert.ok(html.includes('maxlength="8000"'), "composer input capped at the server limit");
   assert.ok(html.includes("מקורות שנבדקו עכשיו"), "live sources shown to the user");
   assert.ok(html.includes("noopener noreferrer"), "source links isolated");
+  assert.ok(html.includes("אתר הזמנות"), "source quality labels rendered");
 });
 
 test("Vercel mirror: same behavior through the shared core (200 reply, 413, truncated flag)", async () => {

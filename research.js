@@ -7,9 +7,9 @@ export const MAX_SEARCH_RESULTS = 6;
 export const SEARCH_TIMEOUT_MS = 9000;
 
 const LIVE_PATTERNS = [
-  /מלונ|hotel|כשר|kosher|חב["״']?ד|chabad|בורג'? חליפה|burj khalifa/i,
+  /כשר|kosher|חב["״'׳]?ד|chabad|בורג[׳'״]? חליפה|burj khalifa|מלונ(?:ות|י|ון) (?:ליד|קרוב|בסביבת)|hotel(?:s)? (?:near|close to)/i,
   /ביקור(?:ו|וֹ)?ת|review|מתקנ|facility|מטבח|kitchen|בריכה|pool/i,
-  /צ'ק[ -]?אין|check[ -]?in/i,
+  /צ[׳']ק[ -]?אין|check[ -]?in/i,
   /דרכון|כניסה ל|ויזה|passport|entry requirement|visa|תוקף/i,
   /מחיר|זמינות|availability|price|מדיניות|policy|עדכני|כיום|עכשיו/i,
 ];
@@ -26,6 +26,21 @@ export function latestQuestion(messages) {
 export function buildSearchQuery(messages) {
   const question = latestQuestion(messages);
   return `${question}\nהעדף מקורות רשמיים ועדכניים; למלון: אתר המלון ומקור כשרות מוסמך; לכניסה: רשות הגירה/שגרירות; לחברת תעופה: אתר החברה.`;
+}
+
+const SOCIAL_DOMAINS = new Set(["facebook.com", "www.facebook.com", "instagram.com", "www.instagram.com", "tiktok.com", "www.tiktok.com"]);
+const OTA_DOMAINS = new Set(["booking.com", "www.booking.com", "agoda.com", "www.agoda.com", "expedia.com", "www.expedia.com", "tripadvisor.com", "www.tripadvisor.com", "trivago.com", "www.trivago.com", "destinia.com", "www.destinia.com"]);
+const REVIEW_DOMAINS = new Set(["tripadvisor.co.il", "www.tripadvisor.co.il", "telegraph.co.uk", "www.telegraph.co.uk"]);
+
+export function classifySource(url) {
+  const host = new URL(url).hostname.toLowerCase();
+  if (SOCIAL_DOMAINS.has(host)) return "social";
+  if (OTA_DOMAINS.has(host)) return "ota";
+  if (REVIEW_DOMAINS.has(host)) return "review";
+  if (host.endsWith(".gov") || host.endsWith(".gov.il") || host.endsWith(".gov.ae") || host === "gov.il") return "government";
+  if (/^(www\.)?(elal|emirates|etihad|flydubai|arkia)\./.test(host)) return "airline";
+  if (host.includes("chabad")) return "community_official";
+  return "other";
 }
 
 function safeUrl(value) {
@@ -46,6 +61,7 @@ export function normalizeSources(results) {
     sources.push({
       title: typeof item?.title === "string" ? item.title.trim().slice(0, 240) : new URL(url).hostname,
       url,
+      sourceType: classifySource(url),
       content: typeof item?.content === "string" ? item.content.trim().slice(0, 3500) : "",
     });
     if (sources.length >= MAX_SEARCH_RESULTS) break;
@@ -79,6 +95,19 @@ export async function searchWeb({ query, apiKey, fetchImpl, timeoutMs = SEARCH_T
   }
 }
 
+export function isUnknownDatePassportQuery(messages) {
+  const q = latestQuestion(messages);
+  return /(?:דרכון|passport)/i.test(q) && /(?:00[\/.-]?00|000|תאריך[^\n]{0,30}00)/i.test(q);
+}
+
+export function hasDirectAuthoritativeUnknownDateEvidence(sources) {
+  return sources.some((s) =>
+    ["government", "airline"].includes(s.sourceType) &&
+    /(?:00[\/.-]?00|000|unknown date|unknown day|unknown month|יום|חודש)/i.test(s.content) &&
+    /(?:איחוד האמירויות|דובאי|UAE|United Arab Emirates|Dubai)/i.test(s.content)
+  );
+}
+
 export function sourceContext(sources) {
-  return sources.map((s, i) => `[${i + 1}] ${s.title}\nURL: ${s.url}\nקטע מקור: ${s.content || "(ללא קטע טקסט)"}`).join("\n\n");
+  return sources.map((s, i) => `[${i + 1}] ${s.title}\nסוג מקור: ${s.sourceType || classifySource(s.url)}\nURL: ${s.url}\nקטע מקור: ${s.content || "(ללא קטע טקסט)"}`).join("\n\n");
 }
