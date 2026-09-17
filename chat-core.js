@@ -40,6 +40,10 @@ export const SYSTEM_PROMPT = `אתה Travel Bot — עוזר ידע מקצועי
 - לעולם אל תחשב או תציג פיצוי על כבודה "לפי משקל" תחת אמנת מונטריאול — חישוב לפי קילוגרם שייך לשיטת ורשה הישנה. תחת מונטריאול מגבלת האחריות על כבודה היא לנוסע (סעיף 22(2)); נכון לתיקון ICAO שנכנס לתוקף ב-28 בדצמבר 2024 המגבלה היא 1,519 יחידות SDR לנוסע, ויש לאמת את המספר העדכני מול ICAO לפני ציטוטו ללקוח.
 - עובדות שמשתנות עם הזמן (חוק, אמנות, רגולציה, מדיניות ספק, מועדים, סכומי פיצוי): הצג את הכלל הכללי המקובל, ציין את המקור הרשמי שמולו מאמתים (טקסט אמנת מונטריאול, חוק שירותי תעופה (טיסות), תנאי ההובלה של חברת התעופה, משרד התחבורה/התיירות), וכתוב במפורש שיש לאמת מול המקור העדכני לפני התחייבות ללקוח. אל תמציא סכומים, אחוזים או מועדים מדויקים.
 - אל תמציא עובדות או זכויות. אם אינך יודע, אמור זאת במפורש.
+- בצע הגהה עברית שקטה לפני החזרת התשובה: תקן שגיאות כתיב, אותיות כפולות, מילים משובשות וצירופים שאינם תקינים בעברית. השתמש במונחי תיירות מקובלים בלבד. בפרט: "תנאי התעריף" ולא "תנאי ההתרת"; "לטיסה מסוימת" ולא "למסטיק מסוים"; חברה "מציעה הטבות" ולא "מוכרת הטבות"; "משתנים" ולא "מששתנים". אל תשנה עובדות, מספרים, שמות, ציטוטים או הפניות למקורות בזמן ההגהה.
+- סיים כל תשובה בשתי שורות קצרות ונפרדות, גם כשחסרות עובדות וגם בנושא רגיש:
+  "טיפ לסוכן: ..." — פעולה מעשית אחת שעוזרת לסוכן להשתמש בתשובה מול הלקוח, בלי לחץ מכירתי ובלי הבטחה שלא הוכחה.
+  "שאלת המשך ללקוח: ...?" — שאלה אחת רלוונטית שמקדמת את השיחה או מבררת צורך מכריע. אל תחזור בשאלה על מידע שכבר נמסר ואל תשאל שאלה כללית כמו "איך אפשר לעזור?".
 - אתה עוזר AI אמיתי וכללי, לא תפריט סגור. בשאלה שאינה קשורה לתיירות, עדיין תן עזרה שימושית וקצרה. אם הנושא קליל וברור שהוא מחוץ לתחום, אפשר לפתוח בחיוך עברי עדין ולהחזיר באופן טבעי לעולם התיירות (למשל, בבקשת מתכון אפשר לשאול בחיוך אם יש אירוע במלון), ואז לענות לגוף הבקשה ולציין בעדינות שהתמחותך היא תיירות. אל תחסום, אל תסרב רק מפני שהנושא אינו תיירות, ואל תכריח בדיחה או אזכור תיירות בכל תשובה.
 - כשיש בשאלה שילוב או עמימות בין תיירות לנושא אחר, ענה לשני החלקים הרלוונטיים לפי כוונת המשתמש ואל תסווג אותה אוטומטית כ״מחוץ לתחום״.
 - שלב אמוג'ים רלוונטיים בתשובות רגילות, בטוב טעם ובמידה — בדרך כלל אחד עד שלושה לתשובה, צמודים לנושא (✈️ טיסות, 🏨 מלונות, 🏖️ חופשות, 🛂 דרכונים וכניסה למדינות, 🗺️ מסלולי טיול). האמוג'י מוסיף חמימות ואינו מחליף מילים, מספרים או מקורות; אל תשלב אמוג'ים בתוך ציטוט של מועד, סכום או סעיף חוק.
@@ -88,6 +92,40 @@ export function stripEmojis(text) {
     .trim();
 }
 
+// The model gets an explicit Hebrew proofreading instruction, but known
+// phonetic/decoding slips are also corrected deterministically. Keep this
+// list narrow: broad spell-checking could silently alter supplier names,
+// legal citations or facts.
+const HEBREW_CORRECTIONS = [
+  [/תנאי ההתרת/g, "תנאי התעריף"],
+  [/למסטיק מסוים/g, "לטיסה מסוימת"],
+  [/מוכרת הטבות/g, "מציעה הטבות"],
+  [/מששתנים/g, "משתנים"],
+  [/בday/g, "ביום"],
+];
+
+export function polishHebrew(text) {
+  if (typeof text !== "string" || !text) return text;
+  return HEBREW_CORRECTIONS.reduce(
+    (clean, [pattern, replacement]) => clean.replace(pattern, replacement),
+    text,
+  );
+}
+
+const DEFAULT_AGENT_TIP = "טיפ לסוכן: סכם ללקוח בכתב מה ודאי ומה עדיין דורש אימות.";
+const DEFAULT_CLIENT_QUESTION = "שאלת המשך ללקוח: מה הכי חשוב לך בהזמנה הזאת?";
+
+// The prompt normally produces tailored sales lines. This guard makes the
+// response shape reliable even if the model skips one of them; it never
+// replaces a tailored line the model already wrote.
+export function ensureSalesLayer(text) {
+  if (typeof text !== "string" || !text) return text;
+  const additions = [];
+  if (!/(?:^|\n)\s*טיפ לסוכן\s*:/m.test(text)) additions.push(DEFAULT_AGENT_TIP);
+  if (!/(?:^|\n)\s*שאלת המשך ללקוח\s*:/m.test(text)) additions.push(DEFAULT_CLIENT_QUESTION);
+  return additions.length ? `${text.trim()}\n\n${additions.join("\n")}` : text.trim();
+}
+
 // Normalize an arbitrary client-sent history into a safe shape:
 // user/assistant roles only, alternating (consecutive same-role messages are
 // merged), starting with a user message, capped in count. Message CONTENT is
@@ -129,7 +167,7 @@ export function buildGeminiRequest(messages, model, sources = []) {
         role: m.role === "assistant" ? "model" : "user",
         parts: [{ text: m.content }],
       })),
-      generationConfig: { maxOutputTokens: MAX_OUTPUT_TOKENS, temperature: 0.3 },
+      generationConfig: { maxOutputTokens: MAX_OUTPUT_TOKENS, temperature: 0.2 },
     },
   };
 }
@@ -179,7 +217,9 @@ export async function callGemini({ apiKey, model = DEFAULT_MODEL, messages, sour
     if (!piece && !combined) return { ok: false, status: 502, error: "empty_upstream" };
     combined = combined ? combined + "\n" + piece : piece;
     if (finishReason !== "MAX_TOKENS" || attempt === MAX_CONTINUATIONS) {
-      const reply = isSensitiveConversation(messages) ? stripEmojis(combined) : combined;
+      const proofread = polishHebrew(combined);
+      const withSalesLayer = ensureSalesLayer(proofread);
+      const reply = isSensitiveConversation(messages) ? stripEmojis(withSalesLayer) : withSalesLayer;
       return { ok: true, reply, truncated: finishReason === "MAX_TOKENS" };
     }
     working = [
