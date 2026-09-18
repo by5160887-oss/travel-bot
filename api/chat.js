@@ -1,4 +1,4 @@
-import { needsLiveResearch, buildSearchQuery, searchWeb, isUnknownDatePassportQuery, directAuthoritativeUnknownDateSources, isHotelProximityQuery, filterProximitySources, isHotelRecommendationQuery, filterHotelRecommendationSources } from "../research.js";
+import { needsLiveResearch, buildSearchQuery, searchWeb, isUnknownDatePassportQuery, directAuthoritativeUnknownDateSources, isHotelProximityQuery, filterProximitySources, isHotelRecommendationQuery, filterHotelRecommendationSources, ensureOwnerTravelorSource } from "../research.js";
 
 function answerBasis(researchStatus, sources = []) {
   if (sources.some((source) => ["owner_travelor", "travelor"].includes(source.sourceType))) return "travelor";
@@ -30,7 +30,7 @@ export default async function handler(req, res) {
   if (prepared.error) return res.status(prepared.status).json({ error: prepared.error });
 
   if (isPromptInjectionAttempt(prepared.messages)) {
-    const reply = ensureSalesLayer(PROMPT_INJECTION_REPLY);
+    const reply = PROMPT_INJECTION_REPLY;
     return res.status(200).json({ reply, researchStatus: "blocked_prompt_injection", basis: "safety", sources: [] });
   }
 
@@ -40,7 +40,7 @@ export default async function handler(req, res) {
   if (needsLiveResearch(prepared.messages)) {
     const search = await searchWeb({ query: buildSearchQuery(prepared.messages), apiKey: process.env.TAVILY_API_KEY });
     if (search.ok) {
-      sources = search.sources;
+      sources = ensureOwnerTravelorSource(search.sources, prepared.messages);
       if (isUnknownDatePassportQuery(prepared.messages)) {
         sources = directAuthoritativeUnknownDateSources(sources);
         if (!sources.length) { return res.status(200).json({ reply: ensureSalesLayer("אין בידי מקור ממשלתי או חברת תעופה שתומך ישירות בכלל 00/00 עבור המקרה הזה. לכן איני יכול לקבוע אם הנוסע יורשה להיכנס. יש לאמת מול רשות האוכלוסין, נציגות איחוד האמירויות וחברת התעופה."), researchStatus: "insufficient_authoritative_evidence", basis: "safety", sources: [] }); }
