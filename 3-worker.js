@@ -1,4 +1,4 @@
-import { needsLiveResearch, buildSearchQuery, searchWeb, isUnknownDatePassportQuery, directAuthoritativeUnknownDateSources, isHotelProximityQuery, filterProximitySources, isHotelRecommendationQuery, filterHotelRecommendationSources } from "./research.js";
+import { needsLiveResearch, buildSearchQuery, searchWeb, isUnknownDatePassportQuery, directAuthoritativeUnknownDateSources, isHotelProximityQuery, filterProximitySources, isHotelRecommendationQuery, filterHotelRecommendationSources, ensureOwnerTravelorSource } from "./research.js";
 // Travel Bot — AI chat backend as a Cloudflare Worker (free tier, no card).
 //
 // Activation (owner steps, NOT done in this PR): create a free Cloudflare
@@ -54,7 +54,7 @@ export async function handleChat(request, env) {
   if (prepared.error) return json({ error: prepared.error }, prepared.status);
 
   if (isPromptInjectionAttempt(prepared.messages)) {
-    const reply = ensureSalesLayer(PROMPT_INJECTION_REPLY);
+    const reply = PROMPT_INJECTION_REPLY;
     return json({ reply, researchStatus: "blocked_prompt_injection", basis: "safety", sources: [] }, 200);
   }
 
@@ -64,7 +64,7 @@ export async function handleChat(request, env) {
   if (needsLiveResearch(prepared.messages)) {
     const search = await searchWeb({ query: buildSearchQuery(prepared.messages), apiKey: env.TAVILY_API_KEY });
     if (search.ok) {
-      sources = search.sources;
+      sources = ensureOwnerTravelorSource(search.sources, prepared.messages);
       if (isUnknownDatePassportQuery(prepared.messages)) {
         sources = directAuthoritativeUnknownDateSources(sources);
         if (!sources.length) { return json({ reply: ensureSalesLayer("אין בידי מקור ממשלתי או חברת תעופה שתומך ישירות בכלל 00/00 עבור המקרה הזה. לכן איני יכול לקבוע אם הנוסע יורשה להיכנס. יש לאמת מול רשות האוכלוסין, נציגות איחוד האמירויות וחברת התעופה."), researchStatus: "insufficient_authoritative_evidence", basis: "safety", sources: [] }, 200); }
