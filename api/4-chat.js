@@ -1,4 +1,11 @@
 import { needsLiveResearch, buildSearchQuery, searchWeb, isUnknownDatePassportQuery, directAuthoritativeUnknownDateSources, isHotelProximityQuery, filterProximitySources, isHotelRecommendationQuery, filterHotelRecommendationSources } from "../research.js";
+
+function answerBasis(researchStatus, sources = []) {
+  if (sources.some((source) => ["owner_travelor", "travelor"].includes(source.sourceType))) return "travelor";
+  if (sources.length) return "internet";
+  if (researchStatus === "not_needed") return "knowledge";
+  return "safety";
+}
 // Vercel serverless mirror of worker.js (Cloudflare Worker) — Travel Bot AI chat backend.
 // Same contract: POST /api/chat {messages:[...]} -> {reply} (plus truncated:true
 // when the model hit its output cap). The Gemini key stays server-side as the
@@ -24,7 +31,7 @@ export default async function handler(req, res) {
 
   if (isPromptInjectionAttempt(prepared.messages)) {
     const reply = ensureSalesLayer(PROMPT_INJECTION_REPLY);
-    return res.status(200).json({ reply, researchStatus: "blocked_prompt_injection", sources: [] });
+    return res.status(200).json({ reply, researchStatus: "blocked_prompt_injection", basis: "safety", sources: [] });
   }
 
   const model = process.env.GEMINI_MODEL || DEFAULT_MODEL;
@@ -36,7 +43,7 @@ export default async function handler(req, res) {
       sources = search.sources;
       if (isUnknownDatePassportQuery(prepared.messages)) {
         sources = directAuthoritativeUnknownDateSources(sources);
-        if (!sources.length) { return res.status(200).json({ reply: ensureSalesLayer("אין בידי מקור ממשלתי או חברת תעופה שתומך ישירות בכלל 00/00 עבור המקרה הזה. לכן איני יכול לקבוע אם הנוסע יורשה להיכנס. יש לאמת מול רשות האוכלוסין, נציגות איחוד האמירויות וחברת התעופה."), researchStatus: "insufficient_authoritative_evidence", sources: [] }); }
+        if (!sources.length) { return res.status(200).json({ reply: ensureSalesLayer("אין בידי מקור ממשלתי או חברת תעופה שתומך ישירות בכלל 00/00 עבור המקרה הזה. לכן איני יכול לקבוע אם הנוסע יורשה להיכנס. יש לאמת מול רשות האוכלוסין, נציגות איחוד האמירויות וחברת התעופה."), researchStatus: "insufficient_authoritative_evidence", basis: "safety", sources: [] }); }
       }
       if (isHotelRecommendationQuery(prepared.messages)) sources = filterHotelRecommendationSources(sources, prepared.messages);
       if (isHotelProximityQuery(prepared.messages)) {
@@ -51,5 +58,5 @@ export default async function handler(req, res) {
     if (result.upstreamStatus) payload.status = result.upstreamStatus;
     return res.status(result.status).json(payload);
   }
-  return res.status(200).json({ reply: result.reply, ...(result.truncated ? { truncated: true } : {}), researchStatus, sources: sources.map(({ title, url, sourceType, sourceLabel }) => ({ title, url, sourceType, ...(sourceLabel ? { sourceLabel } : {}) })) });
+  return res.status(200).json({ reply: result.reply, ...(result.truncated ? { truncated: true } : {}), researchStatus, basis: answerBasis(researchStatus, sources), sources: sources.map(({ title, url, sourceType, sourceLabel }) => ({ title, url, sourceType, ...(sourceLabel ? { sourceLabel } : {}) })) });
 }
