@@ -55,6 +55,7 @@ function isOwnerTravelorUrl(url) {
 export function classifySource(url) {
   const host = new URL(url).hostname.toLowerCase();
   if (isOwnerTravelorUrl(url)) return "owner_travelor";
+  if (host === "app.travelor.com" || host.endsWith(".app.travelor.com")) return "travelor";
   if (HOTEL_OFFICIAL_DOMAINS.has(host)) return "hotel_official";
   if (KOSHER_AUTHORITY_DOMAINS.has(host)) return "kosher_certifier";
   if (MAP_DOMAINS.has(host) || (host.endsWith(".google.com") && new URL(url).pathname.includes("/maps"))) return "maps";
@@ -88,9 +89,11 @@ export function normalizeSources(results) {
       sourceType: classifySource(url),
       content: typeof item?.content === "string" ? item.content.trim().slice(0, 3500) : "",
     });
-    if (sources.length >= MAX_SEARCH_RESULTS) break;
   }
-  return sources;
+  const priority = { owner_travelor: 0, travelor: 1 };
+  return sources
+    .sort((a, b) => (priority[a.sourceType] ?? 2) - (priority[b.sourceType] ?? 2))
+    .slice(0, MAX_SEARCH_RESULTS);
 }
 
 export async function searchWeb({ query, apiKey, fetchImpl, timeoutMs = SEARCH_TIMEOUT_MS }) {
