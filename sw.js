@@ -1,6 +1,6 @@
 // Travel Bot service worker: network-first HTML/navigation, offline shell fallback.
 // API requests and chat content are never cached.
-const CACHE = "travel-bot-shell-v3";
+const CACHE = "travel-bot-shell-v4";
 const SHELL = [
   "./1-index.html",
   "./manifest.webmanifest",

@@ -51,7 +51,7 @@ test("service worker caches only the static shell, not chat content", () => {
 });
 
 test("PWA uses versioned network-first navigation with offline fallback", () => {
-  assert.match(sw, /travel-bot-shell-v3/);
+  assert.match(sw, /travel-bot-shell-v4/);
   assert.match(sw, /request\.mode === "navigate"/);
   const nav = sw.indexOf('request.mode === "navigate"');
   const network = sw.indexOf('fetch(request)', nav);

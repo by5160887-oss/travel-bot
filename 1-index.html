@@ -89,7 +89,7 @@ if(!r.ok)throw 0;
 const d=await r.json();
 if(!d||typeof d.reply!=='string'||!d.reply.trim())throw 0;
 if(d.truncated){history.push({role:'assistant',content:d.reply+'\n[התשובה נקטעה באמצע]'});add(d.reply,'bot','התשובה נקטעה באמצע. כתוב ״המשך״ ואשלים אותה.')}
-else{history.push({role:'assistant',content:d.reply});const searchFailures=new Set(['search_unreachable','search_rate_limited','search_upstream_error','search_empty']);const note=searchFailures.has(d.researchStatus)?'החיפוש החי לא היה זמין; אין להסתמך על התשובה לעובדות משתנות.':'';add(d.reply,'bot',note,'',d.sources||[],d.basis||((d.sources||[]).length?'internet':'knowledge'))}
+else{history.push({role:'assistant',content:d.reply});const safetyRefusal=d.researchStatus==='blocked_prompt_injection';const searchFailures=new Set(['search_unreachable','search_rate_limited','search_upstream_error','search_empty']);const note=!safetyRefusal&&searchFailures.has(d.researchStatus)?'החיפוש החי לא היה זמין; אין להסתמך על התשובה לעובדות משתנות.':'';add(d.reply,'bot',note,'',safetyRefusal?[]:(d.sources||[]),safetyRefusal?'':(d.basis||((d.sources||[]).length?'internet':'knowledge')))}
 }catch(e){
 history.pop();
 setTimeout(()=>answer(v),250);
