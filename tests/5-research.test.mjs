@@ -204,7 +204,7 @@ test("Yehuda Travelor query preserves exact affiliate URL and labels owner facts
   const messages = [{ role: "user", content: "בדוק זמינות באתר שלי" }];
   assert.equal(isOwnerTravelorQuery(messages), true);
   assert.equal(needsLiveResearch(messages), true);
-  assert.match(buildSearchQuery(messages), /https:\/\/www\.travelor\.com\/he\?fid=84016/);
+  assert.match(buildSearchQuery(messages), /https:\/\/www\.travelor\.com\/he\/login\?fid=84016/);
   const raw = normalizeSources([
     { url: OWNER_TRAVELOR_URL, title: "Travelor", content: "מחיר וזמינות" },
     { url: "https://www.travelor.com/he", title: "Travelor generic", content: "מחיר" },
