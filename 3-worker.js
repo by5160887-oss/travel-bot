@@ -28,6 +28,13 @@ import {
 // from worker.js — keep this line intact).
 export { DEFAULT_MODEL, SYSTEM_PROMPT, normalizeMessages, buildGeminiRequest };
 
+export function answerBasis(researchStatus, sources = []) {
+  if (sources.some((source) => ["owner_travelor", "travelor"].includes(source.sourceType))) return "travelor";
+  if (sources.length) return "internet";
+  if (researchStatus === "not_needed") return "knowledge";
+  return "safety";
+}
+
 function json(data, status) {
   return new Response(JSON.stringify(data), {
     status,
@@ -48,7 +55,7 @@ export async function handleChat(request, env) {
 
   if (isPromptInjectionAttempt(prepared.messages)) {
     const reply = ensureSalesLayer(PROMPT_INJECTION_REPLY);
-    return json({ reply, researchStatus: "blocked_prompt_injection", sources: [] }, 200);
+    return json({ reply, researchStatus: "blocked_prompt_injection", basis: "safety", sources: [] }, 200);
   }
 
   const model = env.GEMINI_MODEL || DEFAULT_MODEL;
@@ -60,7 +67,7 @@ export async function handleChat(request, env) {
       sources = search.sources;
       if (isUnknownDatePassportQuery(prepared.messages)) {
         sources = directAuthoritativeUnknownDateSources(sources);
-        if (!sources.length) { return json({ reply: ensureSalesLayer("אין בידי מקור ממשלתי או חברת תעופה שתומך ישירות בכלל 00/00 עבור המקרה הזה. לכן איני יכול לקבוע אם הנוסע יורשה להיכנס. יש לאמת מול רשות האוכלוסין, נציגות איחוד האמירויות וחברת התעופה."), researchStatus: "insufficient_authoritative_evidence", sources: [] }, 200); }
+        if (!sources.length) { return json({ reply: ensureSalesLayer("אין בידי מקור ממשלתי או חברת תעופה שתומך ישירות בכלל 00/00 עבור המקרה הזה. לכן איני יכול לקבוע אם הנוסע יורשה להיכנס. יש לאמת מול רשות האוכלוסין, נציגות איחוד האמירויות וחברת התעופה."), researchStatus: "insufficient_authoritative_evidence", basis: "safety", sources: [] }, 200); }
       }
       if (isHotelRecommendationQuery(prepared.messages)) sources = filterHotelRecommendationSources(sources, prepared.messages);
       if (isHotelProximityQuery(prepared.messages)) {
@@ -75,7 +82,7 @@ export async function handleChat(request, env) {
     if (result.upstreamStatus) payload.status = result.upstreamStatus;
     return json(payload, result.status);
   }
-  return json({ reply: result.reply, ...(result.truncated ? { truncated: true } : {}), researchStatus, sources: sources.map(({ title, url, sourceType, sourceLabel }) => ({ title, url, sourceType, ...(sourceLabel ? { sourceLabel } : {}) })) }, 200);
+  return json({ reply: result.reply, ...(result.truncated ? { truncated: true } : {}), researchStatus, basis: answerBasis(researchStatus, sources), sources: sources.map(({ title, url, sourceType, sourceLabel }) => ({ title, url, sourceType, ...(sourceLabel ? { sourceLabel } : {}) })) }, 200);
 }
 
 export default {
