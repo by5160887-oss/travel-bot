@@ -57,6 +57,7 @@ export const SYSTEM_PROMPT = `אתה Travel Bot — עוזר ידע מקצועי
 - סוג המקור מצורף לכל תוצאה. אסור לקרוא למקור "רשמי" אלא אם סוגו government, airline, community_official, או שהדומיין הוא האתר הרשמי של המלון הספציפי והקטע עצמו מוכיח זאת. OTA, review, social ו-other אינם מקור רשמי.
 - בטענת דרכון/כניסה, מסקנה חד-משמעית מותרת רק כשמקור government או airline תומך ישירות בכלל המדויק. אם המקור רק עוסק בויזה או בכניסה באופן כללי, כתוב שאין ראיה מוסמכת מספקת ואל תקבע שהנוסע יכול או אינו יכול להיכנס.
 - מרחק או זמן הליכה למלון מותר לצטט רק ממקור מפות מדוד או מאתר רשמי של המלון/היעד שמציין אותו מפורשות. OTA אינו אימות מרחק. הפרד מלון (hotel) מדירת נופש, serviced apartment או holiday home; אל תציג אותם כאותה קטגוריה.
+- כאשר סופקו מקורות חיים, כל טענה עובדתית שנשענת עליהם חייבת הפניה בפורמט [n] בלבד, כאשר n הוא מספר המקור ברשימה שסופקה. להפניה לכמה מקורות כתוב [2] [4], לעולם לא [2,4]. אל תצטט מספר שאינו קיים ברשימה.
 - הפרד בתשובה בין "ידע כללי" לבין "נבדק עכשיו". אם אין מקור מתאים, כתוב מה לא אומת ואל תשלים מהזיכרון. מקור רשמי גובר על בלוג או אתר הזמנות; ביקורות יש לייחס במפורש לפלטפורמה ולמועד המופיע במקור.
 - "מלון כשר" מותר לכתוב רק כאשר מקור רשמי של המלון או גוף כשרות מוסמך מאשר זאת במפורש. קרבה לבית חב״ד אינה כשרות. מטבחון בחדר אינו מטבח כשר. אל תערבב בין שלוש הקטגוריות.
 - אל תטען למחיר או זמינות חיים בלי דף תעריף/מלאי של הספק לתאריכים ולהרכב המדויקים. אל תצטט תוצאת חיפוש כאישור זמינות.
@@ -160,6 +161,19 @@ async function proofreadHebrew({ text, apiKey, model, fetchImpl }) {
   } catch {
     return text;
   }
+}
+
+
+export function normalizeCitations(text, sourceCount) {
+  if (typeof text !== "string" || !text) return text;
+  if (!Number.isInteger(sourceCount) || sourceCount <= 0) {
+    return text.replace(/\s*\[(?:\d+\s*,\s*)+\d+\]|\s*\[\d+\]/g, "").replace(/[ \t]+\n/g, "\n");
+  }
+  return text
+    .replace(/\[((?:\d+\s*,\s*)+\d+)\]/g, (_, list) => list.split(/\s*,\s*/).map((n) => Number(n)).filter((n) => n >= 1 && n <= sourceCount).map((n) => `[${n}]`).join(" "))
+    .replace(/\[(\d+)\]/g, (whole, n) => Number(n) >= 1 && Number(n) <= sourceCount ? whole : "")
+    .replace(/[ \t]+([.,;:])/g, "$1")
+    .replace(/ {2,}/g, " ");
 }
 
 const DEFAULT_AGENT_TIP = "טיפ לסוכן: סכם ללקוח בכתב מה ודאי ומה עדיין דורש אימות.";
@@ -281,7 +295,8 @@ export async function callGemini({ apiKey, model = DEFAULT_MODEL, messages, sour
     if (finishReason !== "MAX_TOKENS" || attempt === MAX_CONTINUATIONS) {
       const withSalesLayer = ensureSalesLayer(combined);
       const proofread = await proofreadHebrew({ text: withSalesLayer, apiKey, model, fetchImpl: doFetch });
-      const reply = isSensitiveConversation(messages) ? stripEmojis(proofread) : proofread;
+      const cited = normalizeCitations(proofread, sources.length);
+      const reply = isSensitiveConversation(messages) ? stripEmojis(cited) : cited;
       return { ok: true, reply, truncated: finishReason === "MAX_TOKENS" };
     }
     working = [
