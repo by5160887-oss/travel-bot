@@ -51,9 +51,9 @@ test("worker blocks a detected attack before calling Gemini", async () => {
     assert.equal(res.status, 200);
     const body = await res.json();
     assert.equal(body.researchStatus, "blocked_prompt_injection");
-    assert.ok(body.reply.startsWith(PROMPT_INJECTION_REPLY));
-    assert.match(body.reply, /טיפ לסוכן:/);
-    assert.match(body.reply, /שאלת המשך ללקוח:/);
+    assert.equal(body.reply, PROMPT_INJECTION_REPLY);
+    assert.doesNotMatch(body.reply, /טיפ לסוכן:|שאלת המשך ללקוח:/);
+    assert.equal(body.basis, "safety");
     assert.equal(called, false);
   } finally { globalThis.fetch = real; }
 });
