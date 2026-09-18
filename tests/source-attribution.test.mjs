@@ -60,3 +60,11 @@ test("verified official hotel sources survive lower-ranked aggregator results", 
   assert.equal(sources[0].sourceType, "hotel_official");
   assert.ok(sources.some((source) => source.url === "https://www.hotelkingdavid.cz/kosher"));
 });
+
+test("blocked prompt-injection refusal has no search note, source list or basis label", () => {
+  const html = readFileSync(new URL("../1-index.html", import.meta.url), "utf8");
+  assert.match(html, /safetyRefusal=d\.researchStatus==='blocked_prompt_injection'/);
+  assert.match(html, /safetyRefusal\?\[\]:\(d\.sources\|\|\[\]\)/);
+  assert.match(html, /safetyRefusal\?'':\(d\.basis/);
+  assert.match(html, /!safetyRefusal&&searchFailures\.has/);
+});
