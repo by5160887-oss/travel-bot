@@ -4,8 +4,9 @@
 
 export const SEARCH_ENDPOINT = "https://api.tavily.com/search";
 export const MAX_SEARCH_RESULTS = 6;
+export const SEARCH_RESULT_CANDIDATES = 10;
 export const SEARCH_TIMEOUT_MS = 9000;
-export const OWNER_TRAVELOR_URL = "https://www.travelor.com/he?fid=84016";
+export const OWNER_TRAVELOR_URL = "https://www.travelor.com/he/login?fid=84016";
 
 const LIVE_PATTERNS = [
   /כשר|kosher|חב["״'׳]?ד|chabad|בורג[׳'״]? חליפה|burj khalifa|מלונ(?:ות|י|ון) (?:ליד|קרוב|בסביבת)|hotel(?:s)? (?:near|close to)/i,
@@ -44,12 +45,15 @@ const HOTEL_OFFICIAL_DOMAINS = new Set([
   "www.armanihotels.com", "armanihotels.com",
   "www.addresshotels.com", "addresshotels.com",
   "www.tajhotels.com", "tajhotels.com",
+  "www.hotelkingdavid.cz", "hotelkingdavid.cz",
 ]);
 const KOSHER_AUTHORITY_DOMAINS = new Set(["www.ok.org", "ok.org", "www.oukosher.org", "oukosher.org", "www.star-k.org", "star-k.org"]);
 
 function isOwnerTravelorUrl(url) {
   const parsed = new URL(url);
-  return (parsed.hostname === "travelor.com" || parsed.hostname === "www.travelor.com") && parsed.pathname === "/he" && parsed.searchParams.get("fid") === "84016";
+  return (parsed.hostname === "travelor.com" || parsed.hostname === "www.travelor.com")
+    && ["/he", "/he/login"].includes(parsed.pathname)
+    && parsed.searchParams.get("fid") === "84016";
 }
 
 export function classifySource(url) {
@@ -75,6 +79,24 @@ function safeUrl(value) {
   } catch { return null; }
 }
 
+export function ownerTravelorSource(messages) {
+  if (!isOwnerTravelorQuery(messages)) return null;
+  return {
+    title: "Travelor של יהודה - התחברות",
+    url: OWNER_TRAVELOR_URL,
+    sourceType: "owner_travelor",
+    content: "עמוד ההתחברות הציבורי של Travelor בקישור האישי של יהודה. הדף אינו מספק גישה למלאי, למחירים או לדשבורד פרטי.",
+    sourceLabel: "באתר שלך",
+  };
+}
+
+export function ensureOwnerTravelorSource(sources, messages) {
+  const owner = ownerTravelorSource(messages);
+  if (!owner) return Array.isArray(sources) ? sources : [];
+  const rest = (Array.isArray(sources) ? sources : []).filter((source) => source.url !== OWNER_TRAVELOR_URL);
+  return [owner, ...rest].slice(0, MAX_SEARCH_RESULTS);
+}
+
 export function normalizeSources(results) {
   if (!Array.isArray(results)) return [];
   const seen = new Set();
@@ -90,9 +112,9 @@ export function normalizeSources(results) {
       content: typeof item?.content === "string" ? item.content.trim().slice(0, 3500) : "",
     });
   }
-  const priority = { owner_travelor: 0, travelor: 1 };
+  const priority = { owner_travelor: 0, travelor: 1, government: 2, airline: 2, hotel_official: 2, kosher_certifier: 2, community_official: 3, maps: 3 };
   return sources
-    .sort((a, b) => (priority[a.sourceType] ?? 2) - (priority[b.sourceType] ?? 2))
+    .sort((a, b) => (priority[a.sourceType] ?? 10) - (priority[b.sourceType] ?? 10))
     .slice(0, MAX_SEARCH_RESULTS);
 }
 
@@ -107,7 +129,7 @@ export async function searchWeb({ query, apiKey, fetchImpl, timeoutMs = SEARCH_T
     const response = await doFetch(SEARCH_ENDPOINT, {
       method: "POST",
       headers,
-      body: JSON.stringify({ query, search_depth: "advanced", max_results: MAX_SEARCH_RESULTS, include_answer: false }),
+      body: JSON.stringify({ query, search_depth: "advanced", max_results: SEARCH_RESULT_CANDIDATES, include_answer: false }),
       signal: controller.signal,
     });
     if (!response.ok) return { ok: false, error: response.status === 429 ? "search_rate_limited" : "search_upstream_error", status: response.status };
