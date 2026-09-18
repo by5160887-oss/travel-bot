@@ -7,7 +7,7 @@ import { needsLiveResearch, buildSearchQuery, searchWeb, isUnknownDatePassportQu
 // All chat logic lives in ../chat-core.js, shared verbatim with the Cloudflare
 // Worker so the two backends cannot drift apart.
 
-import { DEFAULT_MODEL, prepareChat, callGemini, ensureSalesLayer } from "../chat-core.js";
+import { DEFAULT_MODEL, prepareChat, callGemini, ensureSalesLayer, isPromptInjectionAttempt, PROMPT_INJECTION_REPLY } from "../chat-core.js";
 
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "method_not_allowed" });
@@ -21,6 +21,11 @@ export default async function handler(req, res) {
   }
   const prepared = prepareChat(body);
   if (prepared.error) return res.status(prepared.status).json({ error: prepared.error });
+
+  if (isPromptInjectionAttempt(prepared.messages)) {
+    const reply = ensureSalesLayer(PROMPT_INJECTION_REPLY);
+    return res.status(200).json({ reply, researchStatus: "blocked_prompt_injection", sources: [] });
+  }
 
   const model = process.env.GEMINI_MODEL || DEFAULT_MODEL;
   let sources = [];
