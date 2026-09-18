@@ -36,3 +36,27 @@ test("UI labels every answer source and numbers displayed links", () => {
   assert.ok(html.includes("`[${i+1}]"));
   assert.ok(html.includes("d.basis"));
 });
+
+test("owner Travelor login link is canonical and both fid pages classify as owner sources", () => {
+  assert.equal(OWNER_TRAVELOR_URL, "https://www.travelor.com/he/login?fid=84016");
+  assert.equal(classifySource("https://www.travelor.com/he?fid=84016"), "owner_travelor");
+  assert.equal(classifySource("https://www.travelor.com/he/login?fid=84016"), "owner_travelor");
+});
+
+test("official Prague kosher hotel domain is eligible as an official hotel source", () => {
+  assert.equal(classifySource("https://www.hotelkingdavid.cz/kosher"), "hotel_official");
+});
+
+test("UI only shows live-search warning for actual search failures", () => {
+  const html = readFileSync(new URL("../1-index.html", import.meta.url), "utf8");
+  for (const status of ["search_unreachable", "search_rate_limited", "search_upstream_error", "search_empty"]) assert.ok(html.includes(status));
+  assert.doesNotMatch(html, /researchStatus&&d\.researchStatus!==['"]live/);
+});
+
+test("verified official hotel sources survive lower-ranked aggregator results", () => {
+  const noisy = Array.from({ length: 8 }, (_, i) => ({ title: `Aggregator ${i}`, url: `https://example${i}.com/x`, content: "x" }));
+  noisy.push({ title: "King David kosher", url: "https://www.hotelkingdavid.cz/kosher", content: "official kosher details" });
+  const sources = normalizeSources(noisy);
+  assert.equal(sources[0].sourceType, "hotel_official");
+  assert.ok(sources.some((source) => source.url === "https://www.hotelkingdavid.cz/kosher"));
+});
