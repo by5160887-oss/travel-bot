@@ -41,7 +41,8 @@ export function isOwnerTravelorQuery(messages) {
 export function buildSearchQuery(messages) {
   const question = latestQuestion(messages);
   const ownerSite = isOwnerTravelorQuery(messages) ? `\nמקור הבעלות המועדף למחיר וזמינות: ${OWNER_TRAVELOR_URL} (שמור fid=84016 בכל קישור).` : "";
-  return `${question}${ownerSite}\nהעדף מקורות רשמיים ועדכניים; למלון: אתר המלון ומקור כשרות מוסמך; לכניסה: רשות הגירה/שגרירות; לחברת תעופה: אתר החברה.`;
+  const chabad = /חב["״'׳]?ד|chabad/i.test(question) ? "\nעבור בתי חב״ד: העדף את דפי chabad.org הרשמיים של העיר (centers/directory) ואת אתר בית החב״ד המקומי, ושלוף לכל בית חב״ד כתובת, טלפון, מייל וקישור, וכן מסעדות כשרות ומכולת כשרה בעיר." : "";
+  return `${question}${chabad}${ownerSite}\nהעדף מקורות רשמיים ועדכניים; למלון: אתר המלון ומקור כשרות מוסמך; לכניסה: רשות הגירה/שגרירות; לחברת תעופה: אתר החברה.`;
 }
 
 const SOCIAL_DOMAINS = new Set(["facebook.com", "www.facebook.com", "instagram.com", "www.instagram.com", "tiktok.com", "www.tiktok.com"]);
