@@ -29,12 +29,13 @@ test("citation numbers map to the displayed source list", () => {
   assert.equal(normalizeCitations("ידע [1]", 0), "ידע");
 });
 
-test("UI labels every answer source and numbers displayed links", () => {
+test("UI numbers displayed source links and labels their types", () => {
   const html = readFileSync(new URL("../1-index.html", import.meta.url), "utf8");
-  for (const label of ["מטראוולור", "מהאינטרנט", "מבסיס הידע שלנו"]) assert.ok(html.includes(label));
+  for (const label of ["רשות רשמית", "חברת תעופה", "אתר קהילה", "גוף כשרות", "טראוולור"]) assert.ok(html.includes(label));
   assert.ok(html.includes("box.textContent='מקורות:'"));
   assert.ok(html.includes("`[${i+1}]"));
-  assert.ok(html.includes("d.basis"));
+  // The old "מקור התשובה" basis label was removed with the template tail.
+  assert.ok(!html.includes("מקור התשובה:"));
 });
 
 test("owner Travelor login link is canonical and both fid pages classify as owner sources", () => {
@@ -61,10 +62,9 @@ test("verified official hotel sources survive lower-ranked aggregator results", 
   assert.ok(sources.some((source) => source.url === "https://www.hotelkingdavid.cz/kosher"));
 });
 
-test("blocked prompt-injection refusal has no search note, source list or basis label", () => {
+test("blocked prompt-injection refusal has no search note or source list", () => {
   const html = readFileSync(new URL("../1-index.html", import.meta.url), "utf8");
   assert.match(html, /safetyRefusal=d\.researchStatus==='blocked_prompt_injection'/);
   assert.match(html, /safetyRefusal\?\[\]:\(d\.sources\|\|\[\]\)/);
-  assert.match(html, /safetyRefusal\?'':\(d\.basis/);
   assert.match(html, /!safetyRefusal&&searchFailures\.has/);
 });
