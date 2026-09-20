@@ -90,3 +90,17 @@ This branch does not claim live inventory or rates. A price or availability clai
 still requires the supplier's dated inventory/rate page for the exact dates, party
 and child ages. Likewise, Chabad proximity, kosher certification and an in-room
 kitchen remain separate facts.
+
+## Gupshup WhatsApp sandbox adapter (preview only)
+
+`POST /api/gupshup-webhook` accepts Gupshup v3 inbound text events, forwards the sender's recent conversation to `/api/chat`, and sends the Travel Bot reply through Gupshup. Recent history is held only in warm-instance memory for 30 minutes (maximum 10 messages per sender); it is deliberately not durable production storage.
+
+Required server-side variables:
+
+- `GUPSHUP_API_KEY`
+- `GUPSHUP_APP_NAME` (sandbox app: `YehudaTravelBot`)
+- `GUPSHUP_SOURCE_NUMBER` (digits only)
+- `GUPSHUP_WEBHOOK_TOKEN` (random secret; configure the callback as `/api/gupshup-webhook?token=...`)
+- `TRAVEL_BOT_BASE_URL` (optional; defaults to the deployment origin)
+
+The endpoint ignores receipts and non-text events, deduplicates provider retries while an instance remains warm, commits no secrets, and does not initiate messages. Configure it only on a preview deployment until the owner approves production.
