@@ -16,9 +16,18 @@ const LIVE_PATTERNS = [
   /מחיר|זמינות|availability|price|מדיניות|policy|עדכני|כיום|עכשיו|אצלי|באתר שלי|האתר שלי|טרוולאור|travelor/i,
 ];
 
+// Itinerary intent: a named destination plus a day count ("יפן 11 ימים"), or
+// explicit planning words. Day counts only match at the END of the question,
+// so legal deadline questions ("מה המועד... תוך 7 ימים?") do not drift here.
+export function isItineraryQuery(messages) {
+  const q = latestQuestion(messages).replace(/[?.!…\s]+$/, "");
+  return /מסלול|itinerary|תכנית טיול|תכנון טיול|לתכנן טיול/i.test(q)
+    || /(?:^|\s)\d{1,2}\s*(?:ימים|לילות)$/.test(q);
+}
+
 export function needsLiveResearch(messages) {
   const latest = [...(messages || [])].reverse().find((m) => m?.role === "user")?.content || "";
-  return LIVE_PATTERNS.some((pattern) => pattern.test(latest));
+  return LIVE_PATTERNS.some((pattern) => pattern.test(latest)) || isItineraryQuery(messages);
 }
 
 export function latestQuestion(messages) {
@@ -32,7 +41,8 @@ export function isOwnerTravelorQuery(messages) {
 export function buildSearchQuery(messages) {
   const question = latestQuestion(messages);
   const ownerSite = isOwnerTravelorQuery(messages) ? `\nמקור הבעלות המועדף למחיר וזמינות: ${OWNER_TRAVELOR_URL} (שמור fid=84016 בכל קישור).` : "";
-  return `${question}${ownerSite}\nהעדף מקורות רשמיים ועדכניים; למלון: אתר המלון ומקור כשרות מוסמך; לכניסה: רשות הגירה/שגרירות; לחברת תעופה: אתר החברה.`;
+  const chabad = /חב["״'׳]?ד|chabad/i.test(question) ? "\nעבור בתי חב״ד: העדף את דפי chabad.org הרשמיים של העיר (centers/directory) ואת אתר בית החב״ד המקומי, ושלוף לכל בית חב״ד כתובת, טלפון, מייל וקישור, וכן מסעדות כשרות ומכולת כשרה בעיר." : "";
+  return `${question}${chabad}${ownerSite}\nהעדף מקורות רשמיים ועדכניים; למלון: אתר המלון ומקור כשרות מוסמך; לכניסה: רשות הגירה/שגרירות; לחברת תעופה: אתר החברה.`;
 }
 
 const SOCIAL_DOMAINS = new Set(["facebook.com", "www.facebook.com", "instagram.com", "www.instagram.com", "tiktok.com", "www.tiktok.com"]);

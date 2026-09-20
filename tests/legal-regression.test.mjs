@@ -86,8 +86,7 @@ test("the exact 10-part two-airline scenario comes back complete (items 1-10, no
     assert.equal(res.status, 200);
     const payload = await res.json();
     assert.ok(payload.reply.startsWith(FULL_ANSWER));
-    assert.match(payload.reply, /טיפ לסוכן:/);
-    assert.match(payload.reply, /שאלת המשך ללקוח:/);
+    assert.doesNotMatch(payload.reply, /טיפ לסוכן:|שאלת המשך ללקוח:|הצעד הבא:/);
     assert.equal(payload.truncated, undefined);
     for (let i = 1; i <= 10; i++) assert.ok(payload.reply.includes(`${i}.`), `item ${i} present`);
     // The whole scenario reaches the model as the newest message...
@@ -114,8 +113,7 @@ test("finishReason MAX_TOKENS triggers one server-side continuation and joins th
     assert.equal(res.status, 200);
     const payload = await res.json();
     assert.ok(payload.reply.startsWith(part1 + "\n" + part2));
-    assert.match(payload.reply, /טיפ לסוכן:/);
-    assert.match(payload.reply, /שאלת המשך ללקוח:/);
+    assert.doesNotMatch(payload.reply, /טיפ לסוכן:|שאלת המשך ללקוח:|הצעד הבא:/);
     assert.equal(payload.truncated, undefined);
     assert.equal(calls.length, 3);
     // The continuation turn carries the partial answer back as a model turn.
@@ -231,8 +229,7 @@ test("Vercel mirror: same behavior through the shared core (200 reply, 413, trun
     await vercelHandler({ method: "POST", body: { messages: [{ role: "user", content: SCENARIO }] } }, res);
     assert.equal(res.statusCode, 200);
     assert.ok(res.payload.reply.startsWith("תשובה מלאה"));
-    assert.match(res.payload.reply, /טיפ לסוכן:/);
-    assert.match(res.payload.reply, /שאלת המשך ללקוח:/);
+    assert.doesNotMatch(res.payload.reply, /טיפ לסוכן:|שאלת המשך ללקוח:|הצעד הבא:/);
   } finally {
     restore();
   }
