@@ -19,7 +19,6 @@ import {
   buildGeminiRequest,
   prepareChat,
   callGemini,
-  ensureSalesLayer,
   isPromptInjectionAttempt,
   PROMPT_INJECTION_REPLY,
 } from "./chat-core.js";
@@ -67,7 +66,7 @@ export async function handleChat(request, env) {
       sources = ensureOwnerTravelorSource(search.sources, prepared.messages);
       if (isUnknownDatePassportQuery(prepared.messages)) {
         sources = directAuthoritativeUnknownDateSources(sources);
-        if (!sources.length) { return json({ reply: ensureSalesLayer("אין בידי מקור ממשלתי או חברת תעופה שתומך ישירות בכלל 00/00 עבור המקרה הזה. לכן איני יכול לקבוע אם הנוסע יורשה להיכנס. יש לאמת מול רשות האוכלוסין, נציגות איחוד האמירויות וחברת התעופה."), researchStatus: "insufficient_authoritative_evidence", basis: "safety", sources: [] }, 200); }
+        if (!sources.length) { return json({ reply: "אין בידי מקור ממשלתי או חברת תעופה שתומך ישירות בכלל 00/00 עבור המקרה הזה. לכן איני יכול לקבוע אם הנוסע יורשה להיכנס. יש לאמת מול רשות האוכלוסין, נציגות איחוד האמירויות וחברת התעופה.", researchStatus: "insufficient_authoritative_evidence", basis: "safety", sources: [] }, 200); }
       }
       if (isHotelRecommendationQuery(prepared.messages)) sources = filterHotelRecommendationSources(sources, prepared.messages);
       if (isHotelProximityQuery(prepared.messages)) {
