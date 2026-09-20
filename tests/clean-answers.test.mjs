@@ -122,3 +122,10 @@ test("the chat UI carries no signature line, no answer-source label and no templ
   assert.ok(html.includes("יפן 11 ימים"));
   assert.ok(html.includes("בתי חב״ד ואוכל כשר בפראג"));
 });
+
+test("every inline script block in the chat page is valid JavaScript", () => {
+  const html = readFileSync(new URL("../1-index.html", import.meta.url), "utf8");
+  const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((m) => m[1]);
+  assert.ok(scripts.length >= 1);
+  for (const sc of scripts) assert.doesNotThrow(() => new Function(sc));
+});
