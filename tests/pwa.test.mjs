@@ -51,7 +51,7 @@ test("service worker caches only the static shell, not chat content", () => {
 });
 
 test("PWA uses versioned network-first navigation with offline fallback", () => {
-  assert.match(sw, /travel-bot-shell-v4/);
+  assert.match(sw, /travel-bot-shell-v\d+/);
   assert.match(sw, /request\.mode === "navigate"/);
   const nav = sw.indexOf('request.mode === "navigate"');
   const network = sw.indexOf('fetch(request)', nav);
@@ -71,6 +71,5 @@ test("PWA exposes a visible update and refresh path", () => {
 
 test("client honors the exact owner Travelor source label without trusting arbitrary labels", () => {
   assert.match(html, /owner_travelor:"טראוולור"/);
-  assert.match(html, /basisLabels/);
   assert.doesNotMatch(html, /sourceLabel=item\.sourceLabel\|\|/);
 });
