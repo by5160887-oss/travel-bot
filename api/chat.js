@@ -19,8 +19,8 @@ import { DEFAULT_MODEL, prepareChat, callGemini, isPromptInjectionAttempt, PROMP
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "method_not_allowed" });
 
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) return res.status(503).json({ error: "ai_not_configured" });
+  const apiKeys = [process.env.GEMINI_API_KEY, process.env.GEMINI_API_KEY_BACKUP].filter(Boolean);
+  if (!apiKeys.length) return res.status(503).json({ error: "ai_not_configured" });
 
   let body = req.body;
   if (typeof body === "string") {
@@ -52,7 +52,10 @@ export default async function handler(req, res) {
       } else researchStatus = "live";
     } else researchStatus = search.error;
   }
-  const result = await callGemini({ apiKey, model, messages: prepared.messages, sources });
+  let result = await callGemini({ apiKey: apiKeys[0], model, messages: prepared.messages, sources });
+  if (!result.ok && apiKeys[1] && (result.error === "rate_limited" || [429, 503].includes(result.upstreamStatus))) {
+    result = await callGemini({ apiKey: apiKeys[1], model, messages: prepared.messages, sources });
+  }
   if (!result.ok) {
     const payload = { error: result.error };
     if (result.upstreamStatus) payload.status = result.upstreamStatus;
