@@ -20,3 +20,12 @@ test("fallback knowledge mirrors the key enrichment areas", () => {
   const html = readFileSync(new URL("../1-index.html", import.meta.url), "utf8");
   for (const phrase of ["שומר שבת", "יקר מדי", "טיול מאורגן ליפן"]) assert.ok(html.includes(phrase), phrase);
 });
+
+
+test("fallback has broad offline coverage and keeps AI-first flow", () => {
+  const html = readFileSync(new URL("../1-index.html", import.meta.url), "utf8");
+  for (const phrase of ["EU261", "חוק שירותי תעופה", "esta.cbp.dhs.gov", "GOV.UK", "ETIAS", "Thai e-Visa", "chabadprague.cz", "chabadhungary.com", "chabad.at", "תסריט מכירה"]) assert.ok(html.includes(phrase), phrase);
+  assert.ok(html.includes("fetch('/api/chat'"));
+  assert.ok(html.includes("setTimeout(()=>answer(v),250)"));
+  assert.ok(html.includes("const ACCESS='TRAVEL2026'"));
+});
