@@ -1,3 +1,5 @@
+import { TEST_ENV, TEST_HEADERS, redisReply } from "./access-fixture.mjs";
+Object.assign(process.env,TEST_ENV);
 // Regression tests for the legal-reliability audit (2026-09-17).
 // Background: the two-airline delayed-baggage scenario below got an answer
 // that (a) was cut mid-sentence at item 9 and lost item 10 entirely because
@@ -56,7 +58,7 @@ const FULL_ANSWER = [
 function post(payload) {
   return new Request("https://worker.test/api/chat", {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: { "content-type": "application/json", ...TEST_HEADERS },
     body: JSON.stringify(payload),
   });
 }
@@ -66,6 +68,7 @@ function mockSequence(steps) {
   const calls = [];
   const real = globalThis.fetch;
   globalThis.fetch = async (url, opts) => {
+ if(redisReply(url))return redisReply(url);
     calls.push({ url, body: JSON.parse(opts.body) });
     const step = steps[Math.min(calls.length - 1, steps.length - 1)];
     return {
@@ -82,7 +85,7 @@ function mockSequence(steps) {
 test("the exact 10-part two-airline scenario comes back complete (items 1-10, no truncation)", async () => {
   const { calls, restore } = mockSequence([{ text: FULL_ANSWER, finishReason: "STOP" }]);
   try {
-    const res = await handleChat(post({ messages: [{ role: "user", content: SCENARIO }] }), { GEMINI_API_KEY: "k" });
+    const res = await handleChat(post({ messages: [{ role: "user", content: SCENARIO }] }), { ...TEST_ENV, GEMINI_API_KEY: "k" });
     assert.equal(res.status, 200);
     const payload = await res.json();
     assert.ok(payload.reply.startsWith(FULL_ANSWER));
@@ -109,7 +112,7 @@ test("finishReason MAX_TOKENS triggers one server-side continuation and joins th
     { text: part2, finishReason: "STOP" },
   ]);
   try {
-    const res = await handleChat(post({ messages: [{ role: "user", content: SCENARIO }] }), { GEMINI_API_KEY: "k" });
+    const res = await handleChat(post({ messages: [{ role: "user", content: SCENARIO }] }), { ...TEST_ENV, GEMINI_API_KEY: "k" });
     assert.equal(res.status, 200);
     const payload = await res.json();
     assert.ok(payload.reply.startsWith(part1 + "\n" + part2));
@@ -130,7 +133,7 @@ test("finishReason MAX_TOKENS triggers one server-side continuation and joins th
 test("repeated MAX_TOKENS is flagged truncated:true — a partial answer is never returned as complete", async () => {
   const { restore } = mockSequence([{ text: "חצי תשובה", finishReason: "MAX_TOKENS" }]);
   try {
-    const res = await handleChat(post({ messages: [{ role: "user", content: SCENARIO }] }), { GEMINI_API_KEY: "k" });
+    const res = await handleChat(post({ messages: [{ role: "user", content: SCENARIO }] }), { ...TEST_ENV, GEMINI_API_KEY: "k" });
     assert.equal(res.status, 200);
     const payload = await res.json();
     assert.equal(payload.truncated, true);
@@ -143,7 +146,7 @@ test("repeated MAX_TOKENS is flagged truncated:true — a partial answer is neve
 test("long messages are rejected loudly (413 message_too_long), never silently chopped", async () => {
   const res = await handleChat(
     post({ messages: [{ role: "user", content: "x".repeat(MAX_MSG_CHARS + 1) }] }),
-    { GEMINI_API_KEY: "k" },
+    { ...TEST_ENV, GEMINI_API_KEY: "k" },
   );
   assert.equal(res.status, 413);
   assert.equal((await res.json()).error, "message_too_long");
@@ -226,7 +229,7 @@ test("Vercel mirror: same behavior through the shared core (200 reply, 413, trun
   process.env.GEMINI_API_KEY = "k";
   try {
     const res = resShim();
-    await vercelHandler({ method: "POST", body: { messages: [{ role: "user", content: SCENARIO }] } }, res);
+    await vercelHandler({ method: "POST", headers: TEST_HEADERS, body: { messages: [{ role: "user", content: SCENARIO }] } }, res);
     assert.equal(res.statusCode, 200);
     assert.ok(res.payload.reply.startsWith("תשובה מלאה"));
     assert.doesNotMatch(res.payload.reply, /טיפ לסוכן:|שאלת המשך ללקוח:|הצעד הבא:/);
@@ -235,7 +238,7 @@ test("Vercel mirror: same behavior through the shared core (200 reply, 413, trun
   }
   const res413 = resShim();
   await vercelHandler(
-    { method: "POST", body: { messages: [{ role: "user", content: "x".repeat(MAX_MSG_CHARS + 1) }] } },
+    { method: "POST", headers: TEST_HEADERS, body: { messages: [{ role: "user", content: "x".repeat(MAX_MSG_CHARS + 1) }] } },
     res413,
   );
   assert.equal(res413.statusCode, 413);
