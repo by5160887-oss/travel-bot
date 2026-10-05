@@ -1,3 +1,4 @@
+import { officialSearch } from "./official-fixture.mjs";
 // Regression tests for the legal-reliability audit (2026-09-17).
 // Background: the two-airline delayed-baggage scenario below got an answer
 // that (a) was cut mid-sentence at item 9 and lost item 10 entirely because
@@ -66,13 +67,14 @@ function mockSequence(steps) {
   const calls = [];
   const real = globalThis.fetch;
   globalThis.fetch = async (url, opts) => {
+    if(officialSearch(url))return officialSearch(url);
     calls.push({ url, body: JSON.parse(opts.body) });
     const step = steps[Math.min(calls.length - 1, steps.length - 1)];
     return {
       ok: true,
       status: 200,
       json: async () => ({
-        candidates: [{ content: { parts: [{ text: step.text }] }, finishReason: step.finishReason }],
+        candidates: [{ content: { parts: [{ text: step.text.split("\n").map(line => line + " [1]").join("\n") }] }, finishReason: step.finishReason }],
       }),
     };
   };
@@ -85,7 +87,7 @@ test("the exact 10-part two-airline scenario comes back complete (items 1-10, no
     const res = await handleChat(post({ messages: [{ role: "user", content: SCENARIO }] }), { GEMINI_API_KEY: "k" });
     assert.equal(res.status, 200);
     const payload = await res.json();
-    assert.ok(payload.reply.startsWith(FULL_ANSWER));
+    assert.ok(payload.reply.replace(/ \[1\]/g, "").startsWith(FULL_ANSWER));
     assert.doesNotMatch(payload.reply, /טיפ לסוכן:|שאלת המשך ללקוח:|הצעד הבא:/);
     assert.equal(payload.truncated, undefined);
     for (let i = 1; i <= 10; i++) assert.ok(payload.reply.includes(`${i}.`), `item ${i} present`);
@@ -112,14 +114,14 @@ test("finishReason MAX_TOKENS triggers one server-side continuation and joins th
     const res = await handleChat(post({ messages: [{ role: "user", content: SCENARIO }] }), { GEMINI_API_KEY: "k" });
     assert.equal(res.status, 200);
     const payload = await res.json();
-    assert.ok(payload.reply.startsWith(part1 + "\n" + part2));
+    assert.ok(payload.reply.replace(/ \[1\]/g, "").startsWith(part1 + "\n" + part2));
     assert.doesNotMatch(payload.reply, /טיפ לסוכן:|שאלת המשך ללקוח:|הצעד הבא:/);
     assert.equal(payload.truncated, undefined);
     assert.equal(calls.length, 3);
     // The continuation turn carries the partial answer back as a model turn.
     const cont = calls[1].body.contents;
     assert.equal(cont[cont.length - 2].role, "model");
-    assert.equal(cont[cont.length - 2].parts[0].text, part1);
+    assert.equal(cont[cont.length - 2].parts[0].text.replace(/ \[1\]/g, ""), part1);
     assert.equal(cont[cont.length - 1].role, "user");
     assert.equal(cont[cont.length - 1].parts[0].text, CONTINUATION_PROMPT);
   } finally {

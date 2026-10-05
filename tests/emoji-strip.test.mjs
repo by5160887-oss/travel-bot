@@ -10,14 +10,14 @@ function mockFetch(reply) {
 }
 
 test("baggage-loss legal answers lose every emoji, deterministically", async () => {
-  const modelReply = "תחת אמנת מונטריאול ✈️, סעיף 17(3): 21 יום 🧳. יש להגיש תביעה כתובת 📝.";
+  const modelReply = "תחת אמנת מונטריאול ✈️, סעיף 17(3): 21 יום 🧳 [1]. יש להגיש תביעה כתובת 📝.";
   const res = await callGemini({
-    apiKey: "k", model: "m", fetchImpl: mockFetch(modelReply),
+    apiKey: "k", model: "m", fetchImpl: mockFetch(modelReply), sources: [{sourceType:"legal_official",content:"Fixture only",url:"https://www.icao.int/fixture",title:"Fixture"}],
     messages: [{ role: "user", content: "הכבודה של הלקוח אבדה בטיסה, מה המועדים לתביעה?" }],
   });
   assert.ok(res.ok);
   assert.doesNotMatch(res.reply, /\p{Extended_Pictographic}/u);
-  assert.match(res.reply, /סעיף 17\(3\): 21 יום\./);
+  assert.match(res.reply, /סעיף 17\(3\): 21 יום \[1\]\./);
 });
 
 test("emergency answers lose every emoji", async () => {

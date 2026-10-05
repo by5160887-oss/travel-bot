@@ -56,7 +56,7 @@ test("itinerary questions trigger live research; fact and legal questions do not
   assert.equal(isItineraryQuery(q("יפן 11 ימים")), true);
   assert.equal(needsLiveResearch(q("תכנן לי מסלול ברומא לשישה ימים")), true);
   assert.equal(needsLiveResearch(q("מה ההבדל בין RO, BB ו-HB?")), false);
-  assert.equal(needsLiveResearch(q("מה כלל ה-21 יום באיחור כבודה?")), false);
+  assert.equal(needsLiveResearch(q("מה כלל ה-21 יום באיחור כבודה?")), true);
   assert.equal(needsLiveResearch(q("תכתוב הודעה קצרה ללקוח שמתלבט על מלון בדובאי")), false);
 });
 

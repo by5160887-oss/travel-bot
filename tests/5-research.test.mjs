@@ -92,7 +92,7 @@ test("source quality is classified and social/OTA are never official", () => {
   assert.equal(classifySource("https://www.booking.com/hotel/abc"), "ota");
   assert.equal(classifySource("https://www.gov.il/he/pages/x"), "government");
   assert.equal(classifySource("https://www.elal.com/check-in"), "airline");
-  assert.equal(classifySource("https://chabad-paphos.com/hotels-nearby"), "community_official");
+  assert.equal(classifySource("https://not-really-chabad.example/hotels-nearby"), "other");
 });
 
 test("passport 00 rule requires direct government/airline evidence, not generic visa text", () => {

@@ -1,3 +1,4 @@
+import { isOfficialRequired, authoritativeSources, NO_OFFICIAL_REPLY, isChabadDirectory, directoryReply, travelorSteps } from "./qa-policy.js";
 import { needsLiveResearch, buildSearchQuery, searchWeb, isUnknownDatePassportQuery, directAuthoritativeUnknownDateSources, isHotelProximityQuery, filterProximitySources, isHotelRecommendationQuery, filterHotelRecommendationSources, ensureOwnerTravelorSource } from "./research.js";
 // Travel Bot — AI chat backend as a Cloudflare Worker (free tier, no card).
 //
@@ -57,6 +58,8 @@ export async function handleChat(request, env) {
     return json({ reply, researchStatus: "blocked_prompt_injection", basis: "safety", sources: [] }, 200);
   }
 
+  const howTo = travelorSteps(prepared.messages);
+  if (howTo) return json({ reply: howTo, basis: "knowledge", researchStatus: "not_needed", sources: [] }, 200);
   const model = env.GEMINI_MODEL || DEFAULT_MODEL;
   let sources = [];
   let researchStatus = "not_needed";
@@ -68,13 +71,18 @@ export async function handleChat(request, env) {
         sources = directAuthoritativeUnknownDateSources(sources);
         if (!sources.length) { return json({ reply: "אין בידי מקור ממשלתי או חברת תעופה שתומך ישירות בכלל 00/00 עבור המקרה הזה. לכן איני יכול לקבוע אם הנוסע יורשה להיכנס. יש לאמת מול רשות האוכלוסין, נציגות איחוד האמירויות וחברת התעופה.", researchStatus: "insufficient_authoritative_evidence", basis: "safety", sources: [] }, 200); }
       }
-      if (isHotelRecommendationQuery(prepared.messages)) sources = filterHotelRecommendationSources(sources, prepared.messages);
+      if (!isChabadDirectory(prepared.messages) && isHotelRecommendationQuery(prepared.messages)) sources = filterHotelRecommendationSources(sources, prepared.messages);
       if (isHotelProximityQuery(prepared.messages)) {
         sources = filterProximitySources(sources);
         researchStatus = sources.length ? "live_proximity_without_unverified_distance" : "insufficient_location_evidence";
       } else researchStatus = "live";
     } else researchStatus = search.error;
   }
+  if (isOfficialRequired(prepared.messages)) {
+    sources = authoritativeSources(sources);
+    if (!sources.length) return json({ reply: NO_OFFICIAL_REPLY, basis: "safety", researchStatus: "insufficient_official_evidence", sources: [] }, 200);
+  }
+  if (isChabadDirectory(prepared.messages)) return json({ reply: directoryReply(sources), basis: sources.length ? "internet" : "safety", researchStatus, sources }, 200);
   const result = await callGemini({ apiKey, model, messages: prepared.messages, sources });
   if (!result.ok) {
     const payload = { error: result.error };

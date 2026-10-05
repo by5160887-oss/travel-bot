@@ -1,3 +1,4 @@
+import { isOfficialRequired, officialResearchQuery } from "./qa-policy.js";
 // Provider-neutral live web research for Travel Bot.
 // Default: Tavily keyless mode (free, rate-limited, no account or secret).
 // Optional: TAVILY_API_KEY raises the limit; it must remain a server-side secret.
@@ -27,7 +28,7 @@ export function isItineraryQuery(messages) {
 
 export function needsLiveResearch(messages) {
   const latest = [...(messages || [])].reverse().find((m) => m?.role === "user")?.content || "";
-  return LIVE_PATTERNS.some((pattern) => pattern.test(latest)) || isItineraryQuery(messages);
+  return isOfficialRequired(messages) || LIVE_PATTERNS.some((pattern) => pattern.test(latest)) || isItineraryQuery(messages);
 }
 
 export function latestQuestion(messages) {
@@ -40,9 +41,12 @@ export function isOwnerTravelorQuery(messages) {
 
 export function buildSearchQuery(messages) {
   const question = latestQuestion(messages);
+  if (isOfficialRequired(messages)) return officialResearchQuery(messages);
+  const itinerary = isItineraryQuery(messages) ? "\nמסלול מלא יום-יום עם בוקר, צהריים, ערב, לינה, סדר גאוגרפי והעברות. מקורות לתחבורה ואתרים רשמיים ליעד; שבת בלי נסיעות ואוכל כשר מול חב״ד. אין להמציא זמן רכבת או מרחק הליכה." : "";
+  const thailand = /תאילנד|בנגקוק|פוקט|thailand|bangkok|phuket/i.test(question) ? "\nלכשרות: chabadthailand.co.il ו-jewishthailand.com. הפרד מלון כשר ממלון ליד חב״ד ואוכל כשר במשלוח. העדר תוצאה אינו הוכחה שאין מלון כשר." : "";
   const ownerSite = isOwnerTravelorQuery(messages) ? `\nמקור הבעלות המועדף למחיר וזמינות: ${OWNER_TRAVELOR_URL} (שמור fid=84016 בכל קישור).` : "";
-  const chabad = /חב["״'׳]?ד|chabad/i.test(question) ? "\nעבור בתי חב״ד: העדף את דפי chabad.org הרשמיים של העיר (centers/directory) ואת אתר בית החב״ד המקומי, ושלוף לכל בית חב״ד כתובת, טלפון, מייל וקישור, וכן מסעדות כשרות ומכולת כשרה בעיר." : "";
-  return `${question}${chabad}${ownerSite}\nהעדף מקורות רשמיים ועדכניים; למלון: אתר המלון ומקור כשרות מוסמך; לכניסה: רשות הגירה/שגרירות; לחברת תעופה: אתר החברה.`;
+  const chabad = /חב["״'׳]?ד|chabad/i.test(question) ? "\nעבור בתי חב״ד: העדף את דפי chabad.org הרשמיים של העיר (centers/directory) ואת אתר בית החב״ד המקומי, ושלוף לכל בית חב״ד שדות מפורשים: Address או כתובת:, טלפון בפורמט בינלאומי, מייל וקישור, וכן מסעדות כשרות ומכולת כשרה בעיר." : "";
+  return `${question}${chabad}${ownerSite}${itinerary}${thailand}\nהעדף מקורות רשמיים ועדכניים; למלון: אתר המלון ומקור כשרות מוסמך; לכניסה: רשות הגירה/שגרירות; לחברת תעופה: אתר החברה.`;
 }
 
 const SOCIAL_DOMAINS = new Set(["facebook.com", "www.facebook.com", "instagram.com", "www.instagram.com", "tiktok.com", "www.tiktok.com"]);
@@ -76,9 +80,12 @@ export function classifySource(url) {
   if (SOCIAL_DOMAINS.has(host)) return "social";
   if (OTA_DOMAINS.has(host)) return "ota";
   if (REVIEW_DOMAINS.has(host)) return "review";
+  if (["icao.int", "www.icao.int", "eur-lex.europa.eu", "curia.europa.eu"].includes(host)) return "legal_official";
+  if (["gov.uk","www.gov.uk","mofa.go.jp","www.mofa.go.jp","isa.go.jp","www.isa.go.jp","evisa.gov.tr","www.canada.ca","canada.ca","immi.homeaffairs.gov.au"].includes(host)) return "government";
+  if (["wizzair.com","www.wizzair.com","ryanair.com","www.ryanair.com","lufthansa.com","www.lufthansa.com","elal.com","www.elal.com"].includes(host)) return "airline";
   if (host.endsWith(".gov") || host.endsWith(".gov.il") || host.endsWith(".gov.ae") || host === "gov.il") return "government";
-  if (/^(www\.)?(elal|emirates|etihad|flydubai|arkia)\./.test(host)) return "airline";
-  if (host.includes("chabad")) return "community_official";
+  if (["emirates.com","www.emirates.com","etihad.com","www.etihad.com","flydubai.com","www.flydubai.com","arkia.co.il","www.arkia.co.il"].includes(host)) return "airline";
+  if (["chabad.org","www.chabad.org","chabadprague.cz","www.chabadprague.cz","chabadthailand.co.il","www.chabadthailand.co.il","jewishthailand.com","www.jewishthailand.com"].includes(host)) return "community_official";
   return "other";
 }
 
@@ -122,7 +129,7 @@ export function normalizeSources(results) {
       content: typeof item?.content === "string" ? item.content.trim().slice(0, 3500) : "",
     });
   }
-  const priority = { owner_travelor: 0, travelor: 1, government: 2, airline: 2, hotel_official: 2, kosher_certifier: 2, community_official: 3, maps: 3 };
+  const priority = { owner_travelor: 0, travelor: 1, government: 2, airline: 2, legal_official: 2, hotel_official: 2, kosher_certifier: 2, community_official: 3, maps: 3 };
   return sources
     .sort((a, b) => (priority[a.sourceType] ?? 10) - (priority[b.sourceType] ?? 10))
     .slice(0, MAX_SEARCH_RESULTS);
