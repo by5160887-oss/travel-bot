@@ -1,3 +1,4 @@
+import { createGuard } from "../access-control.js";
 import { needsLiveResearch, buildSearchQuery, searchWeb, isUnknownDatePassportQuery, directAuthoritativeUnknownDateSources, isHotelProximityQuery, filterProximitySources, isHotelRecommendationQuery, filterHotelRecommendationSources, ensureOwnerTravelorSource } from "../research.js";
 
 function answerBasis(researchStatus, sources = []) {
@@ -17,6 +18,7 @@ function answerBasis(researchStatus, sources = []) {
 import { DEFAULT_MODEL, prepareChat, callGemini, isPromptInjectionAttempt, PROMPT_INJECTION_REPLY } from "../chat-core.js";
 
 export default async function handler(req, res) {
+  res.setHeader?.("Cache-Control","no-store");
   if (req.method !== "POST") return res.status(405).json({ error: "method_not_allowed" });
 
   const apiKeys = [process.env.GEMINI_API_KEY, process.env.GEMINI_API_KEY_BACKUP].filter(Boolean);
@@ -29,6 +31,8 @@ export default async function handler(req, res) {
   const prepared = prepareChat(body);
   if (prepared.error) return res.status(prepared.status).json({ error: prepared.error });
 
+  const guard=createGuard(process.env,req.headers);
+  try{await guard.reserve('question')}catch(e){return res.status(e.status).json({error:e.error});}
   if (isPromptInjectionAttempt(prepared.messages)) {
     const reply = PROMPT_INJECTION_REPLY;
     return res.status(200).json({ reply, researchStatus: "blocked_prompt_injection", basis: "safety", sources: [] });
@@ -38,7 +42,8 @@ export default async function handler(req, res) {
   let sources = [];
   let researchStatus = "not_needed";
   if (needsLiveResearch(prepared.messages)) {
-    const search = await searchWeb({ query: buildSearchQuery(prepared.messages), apiKey: process.env.TAVILY_API_KEY });
+    const search = await searchWeb({ query: buildSearchQuery(prepared.messages), apiKey: process.env.TAVILY_API_KEY, fetchImpl: guard.fetch("search") });
+    if(guard.error){return res.status(guard.error.status).json({error:guard.error.error});}
     if (search.ok) {
       sources = ensureOwnerTravelorSource(search.sources, prepared.messages);
       if (isUnknownDatePassportQuery(prepared.messages)) {
@@ -52,10 +57,12 @@ export default async function handler(req, res) {
       } else researchStatus = "live";
     } else researchStatus = search.error;
   }
-  let result = await callGemini({ apiKey: apiKeys[0], model, messages: prepared.messages, sources });
+  let result = await callGemini({ apiKey: apiKeys[0], model, messages: prepared.messages, sources, fetchImpl:guard.fetch("gemini") });
+  if(guard.error){return res.status(guard.error.status).json({error:guard.error.error});}
   if (!result.ok && apiKeys[1] && (result.error === "rate_limited" || [429, 503].includes(result.upstreamStatus))) {
-    result = await callGemini({ apiKey: apiKeys[1], model, messages: prepared.messages, sources });
+    result = await callGemini({ apiKey: apiKeys[1], model, messages: prepared.messages, sources, fetchImpl:guard.fetch("gemini") });
   }
+  if(guard.error){return res.status(guard.error.status).json({error:guard.error.error});}
   if (!result.ok) {
     const payload = { error: result.error };
     if (result.upstreamStatus) payload.status = result.upstreamStatus;
