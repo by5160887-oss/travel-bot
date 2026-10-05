@@ -1,3 +1,5 @@
+import { TEST_ENV, TEST_HEADERS, redisReply } from "./access-fixture.mjs";
+Object.assign(process.env,TEST_ENV);
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -40,14 +42,14 @@ test("system prompt contains explicit hierarchy, extraction and role-hijack defe
 test("worker blocks a detected attack before calling Gemini", async () => {
   const real = globalThis.fetch;
   let called = false;
-  globalThis.fetch = async () => { called = true; throw new Error("must not call upstream"); };
+  globalThis.fetch = async url => { if(redisReply(url))return redisReply(url);called = true; throw new Error("must not call upstream"); };
   try {
     const req = new Request("https://worker.test/api/chat", {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", ...TEST_HEADERS },
       body: JSON.stringify({ messages: [{ role: "user", content: attacks[0] }] }),
     });
-    const res = await handleChat(req, { GEMINI_API_KEY: "test-key" });
+    const res = await handleChat(req, { ...TEST_ENV, GEMINI_API_KEY: "test-key" });
     assert.equal(res.status, 200);
     const body = await res.json();
     assert.equal(body.researchStatus, "blocked_prompt_injection");

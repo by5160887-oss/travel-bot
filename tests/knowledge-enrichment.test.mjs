@@ -27,5 +27,4 @@ test("fallback has broad offline coverage and keeps AI-first flow", () => {
   for (const phrase of ["EU261", "חוק שירותי תעופה", "esta.cbp.dhs.gov", "GOV.UK", "ETIAS", "Thai e-Visa", "chabadprague.cz", "chabadhungary.com", "chabad.at", "תסריט מכירה"]) assert.ok(html.includes(phrase), phrase);
   assert.ok(html.includes("fetch('/api/chat'"));
   assert.ok(html.includes("setTimeout(()=>answer(v),250)"));
-  assert.ok(html.includes("const ACCESS='TRAVEL2026'"));
 });
