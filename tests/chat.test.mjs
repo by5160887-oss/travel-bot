@@ -1,3 +1,6 @@
+import { TEST_ENV, TEST_HEADERS, redisReply } from "./access-fixture.mjs";
+Object.assign(process.env,TEST_ENV);
+import { officialSearch } from "./official-fixture.mjs";
 // Zero-dependency regression tests for worker.js — run with: npm test
 // (node:test is built in; no install step, no network: fetch is mocked).
 
@@ -17,7 +20,7 @@ const FOLLOWUP_A =
 function post(payload) {
   return new Request("https://worker.test/api/chat", {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: { "content-type": "application/json", ...TEST_HEADERS },
     body: JSON.stringify(payload),
   });
 }
@@ -25,6 +28,8 @@ function post(payload) {
 function withMockUpstream(capture, replyText = FOLLOWUP_A) {
   const real = globalThis.fetch;
   globalThis.fetch = async (url, opts) => {
+ if(redisReply(url))return redisReply(url);
+    if(officialSearch(url))return officialSearch(url);
     capture.calls ||= [];
     capture.calls.push({ url, headers: opts.headers, body: JSON.parse(opts.body) });
     capture.url = url;
@@ -33,7 +38,7 @@ function withMockUpstream(capture, replyText = FOLLOWUP_A) {
     return {
       ok: true,
       status: 200,
-      json: async () => ({ candidates: [{ content: { parts: [{ text: replyText }] } }] }),
+      json: async () => ({ candidates: [{ content: { parts: [{ text: replyText.split("\n").map(line => line + " [1]").join("\n") }] } }] }),
     };
   };
   return () => { globalThis.fetch = real; };
@@ -51,12 +56,12 @@ test("regression: base baggage question then specific follow-up — the follow-u
           { role: "user", content: FOLLOWUP_Q },
         ],
       }),
-      { GEMINI_API_KEY: "test-key" },
+      { ...TEST_ENV, GEMINI_API_KEY: "test-key" },
     );
     assert.equal(res.status, 200);
     const payload = await res.json();
     // 1. The model's specific answer is returned, not the canned checklist.
-    assert.ok(payload.reply.startsWith(FOLLOWUP_A));
+    assert.ok(payload.reply.replace(/ \[1\]/g, "").startsWith(FOLLOWUP_A));
     assert.doesNotMatch(payload.reply, /טיפ לסוכן:|שאלת המשך ללקוח:|הצעד הבא:/);
     assert.notEqual(payload.reply, BASE_A);
     // 2. The newest question is the final content sent upstream...
@@ -91,15 +96,15 @@ test("503 with ai_not_configured when GEMINI_API_KEY is unset (client falls back
 
 test("400 on malformed messages payload", async () => {
   for (const payload of [{}, { messages: "x" }, { messages: [] }, { messages: [{ role: "user" }] }]) {
-    const res = await handleChat(post(payload), { GEMINI_API_KEY: "k" });
+    const res = await handleChat(post(payload), { ...TEST_ENV, GEMINI_API_KEY: "k" });
     assert.equal(res.status, 400, JSON.stringify(payload));
   }
-  const bad = new Request("https://worker.test/api/chat", { method: "POST", body: "not json" });
-  assert.equal((await handleChat(bad, { GEMINI_API_KEY: "k" })).status, 400);
+  const bad = new Request("https://worker.test/api/chat", { method: "POST", headers: TEST_HEADERS, body: "not json" });
+  assert.equal((await handleChat(bad, { ...TEST_ENV, GEMINI_API_KEY: "k" })).status, 400);
 });
 
 test("405 on non-POST", async () => {
-  const res = await handleChat(new Request("https://worker.test/api/chat"), { GEMINI_API_KEY: "k" });
+  const res = await handleChat(new Request("https://worker.test/api/chat"), { ...TEST_ENV, GEMINI_API_KEY: "k" });
   assert.equal(res.status, 405);
 });
 
@@ -122,7 +127,7 @@ test("normalizeMessages: caps history at the 12 newest messages and enforces alt
 test("over-long messages are rejected loudly (413), never silently chopped", async () => {
   const res = await handleChat(
     post({ messages: [{ role: "user", content: "x".repeat(9000) }] }),
-    { GEMINI_API_KEY: "k" },
+    { ...TEST_ENV, GEMINI_API_KEY: "k" },
   );
   assert.equal(res.status, 413);
   assert.equal((await res.json()).error, "message_too_long");
@@ -133,9 +138,9 @@ test("over-long messages are rejected loudly (413), never silently chopped", asy
 
 test("upstream quota exhaustion (429) maps to 502 rate_limited so the client falls back", async () => {
   const real = globalThis.fetch;
-  globalThis.fetch = async () => ({ ok: false, status: 429, json: async () => ({}) });
+  globalThis.fetch = async url => redisReply(url)||officialSearch(url) || ({ ok: false, status: 429, json: async () => ({}) });
   try {
-    const res = await handleChat(post({ messages: [{ role: "user", content: BASE_Q }] }), { GEMINI_API_KEY: "k" });
+    const res = await handleChat(post({ messages: [{ role: "user", content: BASE_Q }] }), { ...TEST_ENV, GEMINI_API_KEY: "k" });
     assert.equal(res.status, 502);
     assert.equal((await res.json()).error, "rate_limited");
   } finally {

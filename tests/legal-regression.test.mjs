@@ -1,3 +1,6 @@
+import { TEST_ENV, TEST_HEADERS, redisReply } from "./access-fixture.mjs";
+Object.assign(process.env,TEST_ENV);
+import { officialSearch } from "./official-fixture.mjs";
 // Regression tests for the legal-reliability audit (2026-09-17).
 // Background: the two-airline delayed-baggage scenario below got an answer
 // that (a) was cut mid-sentence at item 9 and lost item 10 entirely because
@@ -56,7 +59,7 @@ const FULL_ANSWER = [
 function post(payload) {
   return new Request("https://worker.test/api/chat", {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: { "content-type": "application/json", ...TEST_HEADERS },
     body: JSON.stringify(payload),
   });
 }
@@ -66,13 +69,15 @@ function mockSequence(steps) {
   const calls = [];
   const real = globalThis.fetch;
   globalThis.fetch = async (url, opts) => {
+ if(redisReply(url))return redisReply(url);
+    if(officialSearch(url))return officialSearch(url);
     calls.push({ url, body: JSON.parse(opts.body) });
     const step = steps[Math.min(calls.length - 1, steps.length - 1)];
     return {
       ok: true,
       status: 200,
       json: async () => ({
-        candidates: [{ content: { parts: [{ text: step.text }] }, finishReason: step.finishReason }],
+        candidates: [{ content: { parts: [{ text: step.text.split("\n").map(line => line + " [1]").join("\n") }] }, finishReason: step.finishReason }],
       }),
     };
   };
@@ -82,10 +87,10 @@ function mockSequence(steps) {
 test("the exact 10-part two-airline scenario comes back complete (items 1-10, no truncation)", async () => {
   const { calls, restore } = mockSequence([{ text: FULL_ANSWER, finishReason: "STOP" }]);
   try {
-    const res = await handleChat(post({ messages: [{ role: "user", content: SCENARIO }] }), { GEMINI_API_KEY: "k" });
+    const res = await handleChat(post({ messages: [{ role: "user", content: SCENARIO }] }), { ...TEST_ENV, GEMINI_API_KEY: "k" });
     assert.equal(res.status, 200);
     const payload = await res.json();
-    assert.ok(payload.reply.startsWith(FULL_ANSWER));
+    assert.ok(payload.reply.replace(/ \[1\]/g, "").startsWith(FULL_ANSWER));
     assert.doesNotMatch(payload.reply, /טיפ לסוכן:|שאלת המשך ללקוח:|הצעד הבא:/);
     assert.equal(payload.truncated, undefined);
     for (let i = 1; i <= 10; i++) assert.ok(payload.reply.includes(`${i}.`), `item ${i} present`);
@@ -109,17 +114,17 @@ test("finishReason MAX_TOKENS triggers one server-side continuation and joins th
     { text: part2, finishReason: "STOP" },
   ]);
   try {
-    const res = await handleChat(post({ messages: [{ role: "user", content: SCENARIO }] }), { GEMINI_API_KEY: "k" });
+    const res = await handleChat(post({ messages: [{ role: "user", content: SCENARIO }] }), { ...TEST_ENV, GEMINI_API_KEY: "k" });
     assert.equal(res.status, 200);
     const payload = await res.json();
-    assert.ok(payload.reply.startsWith(part1 + "\n" + part2));
+    assert.ok(payload.reply.replace(/ \[1\]/g, "").startsWith(part1 + "\n" + part2));
     assert.doesNotMatch(payload.reply, /טיפ לסוכן:|שאלת המשך ללקוח:|הצעד הבא:/);
     assert.equal(payload.truncated, undefined);
     assert.equal(calls.length, 3);
     // The continuation turn carries the partial answer back as a model turn.
     const cont = calls[1].body.contents;
     assert.equal(cont[cont.length - 2].role, "model");
-    assert.equal(cont[cont.length - 2].parts[0].text, part1);
+    assert.equal(cont[cont.length - 2].parts[0].text.replace(/ \[1\]/g, ""), part1);
     assert.equal(cont[cont.length - 1].role, "user");
     assert.equal(cont[cont.length - 1].parts[0].text, CONTINUATION_PROMPT);
   } finally {
@@ -130,7 +135,7 @@ test("finishReason MAX_TOKENS triggers one server-side continuation and joins th
 test("repeated MAX_TOKENS is flagged truncated:true — a partial answer is never returned as complete", async () => {
   const { restore } = mockSequence([{ text: "חצי תשובה", finishReason: "MAX_TOKENS" }]);
   try {
-    const res = await handleChat(post({ messages: [{ role: "user", content: SCENARIO }] }), { GEMINI_API_KEY: "k" });
+    const res = await handleChat(post({ messages: [{ role: "user", content: SCENARIO }] }), { ...TEST_ENV, GEMINI_API_KEY: "k" });
     assert.equal(res.status, 200);
     const payload = await res.json();
     assert.equal(payload.truncated, true);
@@ -143,7 +148,7 @@ test("repeated MAX_TOKENS is flagged truncated:true — a partial answer is neve
 test("long messages are rejected loudly (413 message_too_long), never silently chopped", async () => {
   const res = await handleChat(
     post({ messages: [{ role: "user", content: "x".repeat(MAX_MSG_CHARS + 1) }] }),
-    { GEMINI_API_KEY: "k" },
+    { ...TEST_ENV, GEMINI_API_KEY: "k" },
   );
   assert.equal(res.status, 413);
   assert.equal((await res.json()).error, "message_too_long");
@@ -226,7 +231,7 @@ test("Vercel mirror: same behavior through the shared core (200 reply, 413, trun
   process.env.GEMINI_API_KEY = "k";
   try {
     const res = resShim();
-    await vercelHandler({ method: "POST", body: { messages: [{ role: "user", content: SCENARIO }] } }, res);
+    await vercelHandler({ method: "POST", headers: TEST_HEADERS, body: { messages: [{ role: "user", content: SCENARIO }] } }, res);
     assert.equal(res.statusCode, 200);
     assert.ok(res.payload.reply.startsWith("תשובה מלאה"));
     assert.doesNotMatch(res.payload.reply, /טיפ לסוכן:|שאלת המשך ללקוח:|הצעד הבא:/);
@@ -235,7 +240,7 @@ test("Vercel mirror: same behavior through the shared core (200 reply, 413, trun
   }
   const res413 = resShim();
   await vercelHandler(
-    { method: "POST", body: { messages: [{ role: "user", content: "x".repeat(MAX_MSG_CHARS + 1) }] } },
+    { method: "POST", headers: TEST_HEADERS, body: { messages: [{ role: "user", content: "x".repeat(MAX_MSG_CHARS + 1) }] } },
     res413,
   );
   assert.equal(res413.statusCode, 413);

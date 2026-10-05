@@ -1,3 +1,5 @@
+import { createGuard } from "./access-control.js";
+import { isOfficialRequired, authoritativeSources, NO_OFFICIAL_REPLY, isChabadDirectory, directoryReply, travelorSteps } from "./qa-policy.js";
 import { needsLiveResearch, buildSearchQuery, searchWeb, isUnknownDatePassportQuery, directAuthoritativeUnknownDateSources, isHotelProximityQuery, filterProximitySources, isHotelRecommendationQuery, filterHotelRecommendationSources, ensureOwnerTravelorSource } from "./research.js";
 // Travel Bot — AI chat backend as a Cloudflare Worker (free tier, no card).
 //
@@ -37,7 +39,7 @@ export function answerBasis(researchStatus, sources = []) {
 function json(data, status) {
   return new Response(JSON.stringify(data), {
     status,
-    headers: { "content-type": "application/json; charset=utf-8" },
+    headers: { "content-type": "application/json; charset=utf-8", "cache-control":"no-store" },
   });
 }
 
@@ -52,30 +54,41 @@ export async function handleChat(request, env) {
   const prepared = prepareChat(body);
   if (prepared.error) return json({ error: prepared.error }, prepared.status);
 
+  const guard=createGuard(env,request.headers);
+  try{await guard.reserve('question')}catch(e){return json({error:e.error},e.status);}
   if (isPromptInjectionAttempt(prepared.messages)) {
     const reply = PROMPT_INJECTION_REPLY;
     return json({ reply, researchStatus: "blocked_prompt_injection", basis: "safety", sources: [] }, 200);
   }
 
+  const howTo = travelorSteps(prepared.messages);
+  if (howTo) return json({ reply: howTo, basis: "knowledge", researchStatus: "not_needed", sources: [] }, 200);
   const model = env.GEMINI_MODEL || DEFAULT_MODEL;
   let sources = [];
   let researchStatus = "not_needed";
   if (needsLiveResearch(prepared.messages)) {
-    const search = await searchWeb({ query: buildSearchQuery(prepared.messages), apiKey: env.TAVILY_API_KEY });
+    const search = await searchWeb({ query: buildSearchQuery(prepared.messages), apiKey: env.TAVILY_API_KEY, fetchImpl: guard.fetch("search") });
+    if(guard.error){return json({error:guard.error.error},guard.error.status);}
     if (search.ok) {
       sources = ensureOwnerTravelorSource(search.sources, prepared.messages);
       if (isUnknownDatePassportQuery(prepared.messages)) {
         sources = directAuthoritativeUnknownDateSources(sources);
         if (!sources.length) { return json({ reply: "אין בידי מקור ממשלתי או חברת תעופה שתומך ישירות בכלל 00/00 עבור המקרה הזה. לכן איני יכול לקבוע אם הנוסע יורשה להיכנס. יש לאמת מול רשות האוכלוסין, נציגות איחוד האמירויות וחברת התעופה.", researchStatus: "insufficient_authoritative_evidence", basis: "safety", sources: [] }, 200); }
       }
-      if (isHotelRecommendationQuery(prepared.messages)) sources = filterHotelRecommendationSources(sources, prepared.messages);
+      if (!isChabadDirectory(prepared.messages) && isHotelRecommendationQuery(prepared.messages)) sources = filterHotelRecommendationSources(sources, prepared.messages);
       if (isHotelProximityQuery(prepared.messages)) {
         sources = filterProximitySources(sources);
         researchStatus = sources.length ? "live_proximity_without_unverified_distance" : "insufficient_location_evidence";
       } else researchStatus = "live";
     } else researchStatus = search.error;
   }
-  const result = await callGemini({ apiKey, model, messages: prepared.messages, sources });
+  if (isOfficialRequired(prepared.messages)) {
+    sources = authoritativeSources(sources);
+    if (!sources.length) return json({ reply: NO_OFFICIAL_REPLY, basis: "safety", researchStatus: "insufficient_official_evidence", sources: [] }, 200);
+  }
+  if (isChabadDirectory(prepared.messages)) return json({ reply: directoryReply(sources), basis: sources.length ? "internet" : "safety", researchStatus, sources }, 200);
+  const result = await callGemini({ apiKey, model, messages: prepared.messages, sources, fetchImpl:guard.fetch("gemini") });
+  if(guard.error){return json({error:guard.error.error},guard.error.status);}
   if (!result.ok) {
     const payload = { error: result.error };
     if (result.upstreamStatus) payload.status = result.upstreamStatus;
@@ -87,7 +100,11 @@ export async function handleChat(request, env) {
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
-    if (url.pathname === "/api/chat") return handleChat(request, env);
+    if (["/api/chat","/api/4-chat"].includes(url.pathname)) return handleChat(request, env);
+    if(url.pathname==="/api/access"){
+      if(request.method!=="POST")return json({error:"method_not_allowed"},405);
+      try{await createGuard(env,request.headers).reserve('check');return json({ok:true},200)}catch(e){return json({error:e.error},e.status)}
+    }
     if (env.ASSETS) return env.ASSETS.fetch(request);
     return json({ error: "not_found" }, 404);
   },
