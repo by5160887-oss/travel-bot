@@ -70,7 +70,8 @@ export function travelorSteps(messages) {
 export function officialAnswerHasSupport(text, sources) {
   if (!sources.length) return false;
   // A changing numeric/legal claim must cite an actual provided official source.
-  const claims = text.split(/\n|(?<=[.!])\s+/).filter(line => /\d|זכאי|חייב|מגיע לך|פטור|החזר מלא|מובטח/.test(line));
+  if (/מובטח|בוודאות זכאי|מגיע לך החזר מלא/.test(text)) return false;
+  const claims = text.split(/\n/).filter(line => /\d|זכאי|חייב|מגיע לך|פטור|החזר מלא|מובטח/.test(line));
   return claims.every(line => {
     const refs=[...line.matchAll(/\[(\d+)\]/g)].map(m=>Number(m[1])-1);
     return refs.some(i => sources[i] && ['government','airline','legal_official'].includes(sources[i].sourceType));
