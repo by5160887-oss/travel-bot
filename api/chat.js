@@ -1,4 +1,5 @@
 import { createGuard } from "../access-control.js";
+import { isOfficialRequired, authoritativeSources, NO_OFFICIAL_REPLY, isChabadDirectory, directoryReply, travelorSteps } from "../qa-policy.js";
 import { needsLiveResearch, buildSearchQuery, searchWeb, isUnknownDatePassportQuery, directAuthoritativeUnknownDateSources, isHotelProximityQuery, filterProximitySources, isHotelRecommendationQuery, filterHotelRecommendationSources, ensureOwnerTravelorSource } from "../research.js";
 
 function answerBasis(researchStatus, sources = []) {
@@ -38,6 +39,8 @@ export default async function handler(req, res) {
     return res.status(200).json({ reply, researchStatus: "blocked_prompt_injection", basis: "safety", sources: [] });
   }
 
+  const howTo = travelorSteps(prepared.messages);
+  if (howTo) return res.status(200).json({ reply: howTo, basis: "knowledge", researchStatus: "not_needed", sources: [] });
   const model = process.env.GEMINI_MODEL || DEFAULT_MODEL;
   let sources = [];
   let researchStatus = "not_needed";
@@ -50,13 +53,18 @@ export default async function handler(req, res) {
         sources = directAuthoritativeUnknownDateSources(sources);
         if (!sources.length) { return res.status(200).json({ reply: "אין בידי מקור ממשלתי או חברת תעופה שתומך ישירות בכלל 00/00 עבור המקרה הזה. לכן איני יכול לקבוע אם הנוסע יורשה להיכנס. יש לאמת מול רשות האוכלוסין, נציגות איחוד האמירויות וחברת התעופה.", researchStatus: "insufficient_authoritative_evidence", basis: "safety", sources: [] }); }
       }
-      if (isHotelRecommendationQuery(prepared.messages)) sources = filterHotelRecommendationSources(sources, prepared.messages);
+      if (!isChabadDirectory(prepared.messages) && isHotelRecommendationQuery(prepared.messages)) sources = filterHotelRecommendationSources(sources, prepared.messages);
       if (isHotelProximityQuery(prepared.messages)) {
         sources = filterProximitySources(sources);
         researchStatus = sources.length ? "live_proximity_without_unverified_distance" : "insufficient_location_evidence";
       } else researchStatus = "live";
     } else researchStatus = search.error;
   }
+  if (isOfficialRequired(prepared.messages)) {
+    sources = authoritativeSources(sources);
+    if (!sources.length) return res.status(200).json({ reply: NO_OFFICIAL_REPLY, basis: "safety", researchStatus: "insufficient_official_evidence", sources: [] });
+  }
+  if (isChabadDirectory(prepared.messages)) return res.status(200).json({ reply: directoryReply(sources), basis: sources.length ? "internet" : "safety", researchStatus, sources });
   let result = await callGemini({ apiKey: apiKeys[0], model, messages: prepared.messages, sources, fetchImpl:guard.fetch("gemini") });
   if(guard.error){return res.status(guard.error.status).json({error:guard.error.error});}
   if (!result.ok && apiKeys[1] && (result.error === "rate_limited" || [429, 503].includes(result.upstreamStatus))) {
