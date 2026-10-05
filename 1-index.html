@@ -88,7 +88,7 @@ KB.push(
 {keys:['הודעה ללקוח','נוסח הצעה','פולואפ','מעקב אחרי הצעה'],answer:`📩 נוסח קצר להתאמה:\n\n“היי, בדקתי לכם אפשרות שמתאימה למה שביקשתם: [יעד ותאריכים], טיסות [שעות], [מספר] לילות ב-[מלון] על בסיס [אירוח], כולל [כבודה/העברות]. המחיר כרגע [מחיר] ל-[הרכב]. בחרתי אותה בגלל [יתרון חשוב]. המחיר והזמינות חיים, אז אם זה בכיוון אבדוק ואאשר לפני הזמנה.”\n\nפולואפ: “רק בודק אם ההצעה עדיין רלוונטית. אם משהו לא יושב, זה המחיר, השעות או המלון?”`,source:'ממלאים רק פרטים שנבדקו. לא כותבים “חדר אחרון” או “המחיר עולה” בלי הוכחה.'}
 );
 
-function esc(s){return s.replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}function add(text,who,source='',tag='',liveSources=[]){const d=document.createElement('div');d.className='bubble '+who;d.innerHTML=(tag?`<div class="aitag">${esc(tag)}</div>`:'')+esc(text)+(source?`<div class="source"><span class="caution">חשוב:</span> ${esc(source)}</div>`:'');if(Array.isArray(liveSources)&&liveSources.length){const box=document.createElement('div');box.className='source';box.textContent='מקורות:';liveSources.forEach((item,i)=>{try{const u=new URL(item.url);if(u.protocol!=='https:')return;const a=document.createElement('a');a.className='source-link';a.href=u.href;a.target='_blank';a.rel='noopener noreferrer';const labels={government:"רשות רשמית",airline:"חברת תעופה",community_official:"אתר קהילה",hotel_official:"אתר המלון",kosher_certifier:"גוף כשרות",maps:"מקור מפות",owner_travelor:"טראוולור",travelor:"טראוולור",ota:"אתר הזמנות",review:"אתר ביקורות",social:"רשת חברתית",other:"מקור אינטרנט"};const sourceLabel=labels[item.sourceType]||labels.other;a.textContent=`[${i+1}] ${item.title||u.hostname} (${sourceLabel})`;box.appendChild(a)}catch{}});d.appendChild(box)}messages.appendChild(d);messages.scrollTop=messages.scrollHeight}
+function esc(s){return s.replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}function add(text,who,source='',tag='',liveSources=[]){const d=document.createElement('div');d.className='bubble '+who;d.innerHTML=(tag?`<div class="aitag">${esc(tag)}</div>`:'')+esc(text)+(source?`<div class="source"><span class="caution">חשוב:</span> ${esc(source)}</div>`:'');if(Array.isArray(liveSources)&&liveSources.length){const box=document.createElement('div');box.className='source';box.textContent='מקורות:';liveSources.forEach((item,i)=>{try{const u=new URL(item.url);if(u.protocol!=='https:')return;const a=document.createElement('a');a.className='source-link';a.href=u.href;a.target='_blank';a.rel='noopener noreferrer';const labels={government:"רשות רשמית",airline:"חברת תעופה",legal_official:"מקור משפטי רשמי",community_official:"אתר קהילה",hotel_official:"אתר המלון",kosher_certifier:"גוף כשרות",maps:"מקור מפות",owner_travelor:"טראוולור",travelor:"טראוולור",ota:"אתר הזמנות",review:"אתר ביקורות",social:"רשת חברתית",other:"מקור אינטרנט"};const sourceLabel=labels[item.sourceType]||labels.other;a.textContent=`[${i+1}] ${item.title||u.hostname} (${sourceLabel})`;box.appendChild(a)}catch{}});d.appendChild(box)}messages.appendChild(d);messages.scrollTop=messages.scrollHeight}
 function answer(q){const s=q.toLowerCase();const hit=KB.find(x=>x.keys.some(k=>s.includes(k.toLowerCase())));if(hit)add(hit.answer,'bot',hit.source,'תשובה מבסיס הידע המובנה — ה-AI אינו זמין כרגע');else add(`השאלה הזאת דורשת מידע מדויק ועדכני יותר.
 
 כדי לענות נכון, כתוב את שם הספק או המלון, היעד, התאריכים, הרכב הנוסעים וגילאי הילדים. אם מדובר בזכויות, ציין גם את מסלול הטיסה והיכן נרכשה ההזמנה.
@@ -101,6 +101,7 @@ try{
 const ctrl=new AbortController();const timer=setTimeout(()=>ctrl.abort(),60000);
 const r=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({messages:history.slice(-12)}),signal:ctrl.signal});
 clearTimeout(timer);
+if(r.status===503){history.pop();add('לא ניתן להשלים תשובה מאומתת כרגע. נסה שוב מאוחר יותר.','bot');return}
 if(r.status===413){history.pop();add('ההודעה ארוכה מדי (מעל 8,000 תווים). קצר אותה ונסה שוב.','bot');return}
 if(!r.ok)throw 0;
 const d=await r.json();
@@ -109,6 +110,7 @@ if(d.truncated){history.push({role:'assistant',content:d.reply+'\n[התשובה 
 else{history.push({role:'assistant',content:d.reply});const safetyRefusal=d.researchStatus==='blocked_prompt_injection';const searchFailures=new Set(['search_unreachable','search_rate_limited','search_upstream_error','search_empty']);const note=!safetyRefusal&&searchFailures.has(d.researchStatus)?'החיפוש החי לא היה זמין; אין להסתמך על התשובה לעובדות משתנות.':'';add(d.reply,'bot',note,'',safetyRefusal?[]:(d.sources||[]))}
 }catch(e){
 history.pop();
+if(/כבודה|מזווד|מטען יד|טרולי|דרכון|ויזה|אשרת|פיצוי|תביע|מונטריאול|חוק שירותי תעופה|אוברבוק|baggage|passport|visa/i.test(v)){add('אין כרגע אימות מול מקור רשמי. לא אצטט כלל או מספר מתוך הזיכרון.','bot');return}
 setTimeout(()=>answer(v),250);
 }
 }
