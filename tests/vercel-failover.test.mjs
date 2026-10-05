@@ -1,5 +1,6 @@
 import { TEST_ENV, TEST_HEADERS, redisReply } from "./access-fixture.mjs";
 Object.assign(process.env,TEST_ENV);
+import { officialSearch } from "./official-fixture.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import handler from "../api/chat.js";
@@ -34,6 +35,7 @@ test("Vercel chat retries quota and availability failures with the backup key", 
       const keys = [];
       globalThis.fetch = async (_url, options) => {
  if(redisReply(_url))return redisReply(_url);
+    if(officialSearch(_url))return officialSearch(_url);
         keys.push(options.headers["x-goog-api-key"]);
         if (keys.length === 1) return { ok: false, status: failedStatus };
         return { ok: true, status: 200, json: async () => ({ candidates: [{ content: { parts: [{ text: "אוברבוקינג הוא מכירת יתר." }] } }] }) };
@@ -54,6 +56,7 @@ test("Vercel chat leaves non-quota errors to the existing client fallback", asyn
     const keys = [];
     globalThis.fetch = async (_url, options) => {
  if(redisReply(_url))return redisReply(_url);
+    if(officialSearch(_url))return officialSearch(_url);
       keys.push(options.headers["x-goog-api-key"]);
       return { ok: false, status: 400 };
     };
