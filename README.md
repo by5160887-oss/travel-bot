@@ -104,3 +104,24 @@ Required server-side variables:
 - `TRAVEL_BOT_BASE_URL` (optional; defaults to the deployment origin)
 
 The endpoint ignores receipts and non-text events, deduplicates provider retries while an instance remains warm, commits no secrets, and does not initiate messages. Configure it only on a preview deployment until the owner approves production.
+
+
+## Optional Redis conversation memory (WhatsApp only)
+
+Set `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` as server-side
+Vercel secrets. Never commit the values. Both are required together. The
+Gupshup adapter then shares recent context across warm instances and cold starts.
+The existing limits remain unchanged: 10 messages per sender, expiring 30 minutes
+from the last successful append. Redis keys hash the sender identifier; message
+content is stored as plain JSON in the private database, not encrypted by this app.
+No indefinite archive is created. Browser chat history remains client-supplied.
+
+Without either variable, the old in-process memory behavior is preserved. Partial
+configuration, Redis errors, or malformed stored history fail the webhook request
+rather than silently forgetting context. Append is atomic; simultaneous incoming
+messages may still generate answers from the same earlier history. Delivery
+retry deduplication remains warm-instance-only, as before; a delivery followed
+by a failed history write can cause a duplicate reply on provider retry.
+
+Deployment and real-database verification require a separate review. Adding these
+variables does not activate Redis on the existing main code before this PR merges.
