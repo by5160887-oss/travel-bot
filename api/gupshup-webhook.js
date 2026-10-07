@@ -1,15 +1,15 @@
 import {
-  createConversationStore,
   createDeliveryCache,
   parseInboundText,
   requestTravelBotReply,
   sendGupshupText,
 } from "../gupshup-adapter.js";
 
-// Module-scoped state is intentionally short-lived and best-effort on Vercel.
-// It preserves recent context while an instance is warm without storing customer
-// chats permanently. A durable store can replace this interface for production.
-const conversations = createConversationStore();
+import { createConfiguredConversationStore } from "../redis-memory.js";
+
+// No credentials keeps the existing warm-instance behavior. Redis-configured
+// deployments share the same short-lived sender history across cold starts.
+let conversations;
 const deliveries = createDeliveryCache();
 
 function configured() {
@@ -32,10 +32,10 @@ export default async function handler(req, res) {
   if (!inbound) return res.status(200).json({ accepted: true, ignored: true });
   if (deliveries.seen(inbound.id)) return res.status(200).json({ accepted: true, duplicate: true });
 
-  const history = conversations.get(inbound.sender);
-  const messages = [...history, { role: "user", content: inbound.text }];
-
   try {
+    conversations ||= createConfiguredConversationStore();
+    const history = await conversations.get(inbound.sender);
+    const messages = [...history, { role: "user", content: inbound.text }];
     const origin = process.env.TRAVEL_BOT_BASE_URL || `https://${req.headers.host}`;
     const reply = await requestTravelBotReply({ endpoint: new URL("/api/chat", origin).toString(), messages });
     await sendGupshupText({
@@ -45,7 +45,7 @@ export default async function handler(req, res) {
       appName: process.env.GUPSHUP_APP_NAME,
       text: reply,
     });
-    conversations.append(inbound.sender, { role: "user", content: inbound.text }, { role: "assistant", content: reply });
+    await conversations.append(inbound.sender, { role: "user", content: inbound.text }, { role: "assistant", content: reply });
     return res.status(200).json({ accepted: true });
   } catch (error) {
     deliveries.forget(inbound.id);
