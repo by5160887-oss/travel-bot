@@ -170,6 +170,7 @@ async function proofreadHebrew({ text, apiKey, model, fetchImpl }) {
       method: "POST",
       headers: { "content-type": "application/json", "x-goog-api-key": apiKey },
       body: JSON.stringify(req.body),
+      signal: AbortSignal.timeout(10000),
     });
     if (!upstream.ok) return text;
     const data = await upstream.json();
@@ -274,6 +275,7 @@ export async function callGemini({ apiKey, model = DEFAULT_MODEL, messages, sour
         method: "POST",
         headers: { "content-type": "application/json", "x-goog-api-key": apiKey },
         body: JSON.stringify(req.body),
+        signal: AbortSignal.timeout(15000),
       });
     } catch {
       return { ok: false, status: 502, error: "upstream_unreachable" };
