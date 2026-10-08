@@ -1,4 +1,4 @@
-import { fallbackAnswer } from "../fallback.js";
+import { fallbackAnswer, isHotelPriceQuery, hotelPriceGuidance } from "../fallback.js";
 import { needsLiveResearch, buildSearchQuery, searchWeb, isUnknownDatePassportQuery, directAuthoritativeUnknownDateSources, isHotelProximityQuery, filterProximitySources, isHotelRecommendationQuery, filterHotelRecommendationSources, ensureOwnerTravelorSource } from "../research.js";
 
 function answerBasis(researchStatus, sources = []) {
@@ -33,6 +33,8 @@ export default async function handler(req, res) {
     const reply = PROMPT_INJECTION_REPLY;
     return res.status(200).json({ reply, researchStatus: "blocked_prompt_injection", basis: "safety", sources: [] });
   }
+
+  if (isHotelPriceQuery(prepared.messages)) return res.status(200).json(hotelPriceGuidance(prepared.messages));
 
   if (!apiKeys.length) return res.status(200).json(fallbackAnswer(prepared.messages, "ai_not_configured"));
 
