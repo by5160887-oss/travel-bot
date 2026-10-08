@@ -1,3 +1,4 @@
+import { isHotelPriceQuery, hotelPriceGuidance } from "./fallback.js";
 import { needsLiveResearch, buildSearchQuery, searchWeb, isUnknownDatePassportQuery, directAuthoritativeUnknownDateSources, isHotelProximityQuery, filterProximitySources, isHotelRecommendationQuery, filterHotelRecommendationSources, ensureOwnerTravelorSource } from "./research.js";
 // Travel Bot — AI chat backend as a Cloudflare Worker (free tier, no card).
 //
@@ -45,7 +46,6 @@ export async function handleChat(request, env) {
   if (request.method !== "POST") return json({ error: "method_not_allowed" }, 405);
 
   const apiKey = env.GEMINI_API_KEY;
-  if (!apiKey) return json({ error: "ai_not_configured" }, 503);
 
   let body;
   try { body = await request.json(); } catch { return json({ error: "bad_json" }, 400); }
@@ -56,6 +56,9 @@ export async function handleChat(request, env) {
     const reply = PROMPT_INJECTION_REPLY;
     return json({ reply, researchStatus: "blocked_prompt_injection", basis: "safety", sources: [] }, 200);
   }
+
+  if (isHotelPriceQuery(prepared.messages)) return json(hotelPriceGuidance(prepared.messages), 200);
+  if (!apiKey) return json({ error: "ai_not_configured" }, 503);
 
   const model = env.GEMINI_MODEL || DEFAULT_MODEL;
   let sources = [];
