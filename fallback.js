@@ -1,3 +1,4 @@
+import { normalizeDestinationText, scopeDestinationHistory } from "./destination-context.js";
 // Deterministic fallback only: no model, scraping, inventory or date inference.
 export const OWNER_SITE = 'https://www.travelor.com/he?fid=84016';
 const DISCLAIMER = 'אין כאן מחיר או זמינות שנבדקו בזמן אמת. את התוצאה והתנאים יש לבדוק באתר לפני הזמנה.';
@@ -26,6 +27,7 @@ function extractDates(text) {
   return result;
 }
 export function travelSlots(messages) {
+  messages = scopeDestinationHistory(messages).map(m=>({...m,content:normalizeDestinationText(m.content)}));
   const slots = { destination:null, dates:[], adults:null, children:null, ages:null, rooms:null };
   // Only recover slots from user words, never from an AI's guessed itinerary.
   let previous = '';
@@ -69,6 +71,7 @@ function guidance(messages) {
   return `${summary ? summary+'\n\n' : ''}${question || 'הפרטים מוכנים לחיפוש. פתחו את האתר האישי והזינו אותם במנוע החיפוש; הפרטים לא הוזנו אוטומטית.'}\n\nאתר Travelor של יהודה: ${OWNER_SITE}\n${DISCLAIMER}`;
 }
 export function fallbackAnswer(messages, reason='ai_unavailable') {
+  messages = scopeDestinationHistory(messages).map(m=>({...m,content:normalizeDestinationText(m.content)}));
   const latest = lastUser(messages);
   const concept = CONCEPTS.find(([pattern])=>pattern.test(latest));
   const continued = messages.some(m=>m.role==='assistant' && /מה היעד לחיפוש|מה תאריך היציאה|כמה מבוגרים וכמה ילדים|מה גילאי הילדים|כמה חדרים נדרשים/.test(m.content));
@@ -78,4 +81,16 @@ export function fallbackAnswer(messages, reason='ai_unavailable') {
   else if (INVENTORY.test(latest) || (messages.some(m=>m.role==='user' && INVENTORY.test(m.content)) && /^(?:[\d\s,/:-]|מבוגרים|ילדים|גילאי|הילדים|חדרים|ללא|בלי|זוג|עד|ו)+$/.test(latest)) || (continued && /^[\p{L}\d\s,/.:'-]{1,120}$/u.test(latest)) || DESTINATIONS.some(d=>latest.toLowerCase().includes(d.toLowerCase()))) reply = guidance(messages);
   else reply = 'אפשר לעזור גם בלי AI בהבנת מושגי תיירות ובאיסוף פרטים לחיפוש באתר של יהודה. למחיר או זמינות, כתבו מה מחפשים, יעד, תאריכים והרכב נוסעים.\n\n'+OWNER_SITE+'\n'+DISCLAIMER;
   return {reply:'מענה קבוע ללא AI\n\n'+reply, basis:'knowledge', researchStatus:'deterministic_fallback', fallbackReason:reason, sources:[], liveInventory:false};
+}
+
+// Search snippets and affiliate login/home pages are not bookable quotes.
+export function isHotelPriceQuery(messages) {
+  const users = messages.filter(m=>m.role==='user');
+  const latest = users.at(-1)?.content || '';
+  return /מחיר|כמה עולה|כמה עולים|עלות|תעריף|price|cost|rate/i.test(latest)
+    && /מלון|מלונות|לינה|hotel/i.test(users.map(m=>m.content).join(' '));
+}
+export function hotelPriceGuidance(messages) {
+  const result = fallbackAnswer(messages,'travelor_inventory_not_connected');
+  return {...result, reply:'מחירי מלונות ייבדקו רק באתר Travelor של יהודה. כרגע אין לבוט חיבור מאומת למלאי ולמחירים באתר, ולכן לא אציג מחיר מתוך זיכרון או תוצאת חיפוש כללית.\n\n'+guidance(messages), researchStatus:'travelor_inventory_not_connected'};
 }

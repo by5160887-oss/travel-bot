@@ -202,7 +202,7 @@ test("backend drift guard: both backends import the shared core and keep no priv
 
 test("client: KB fallback is visibly labelled, truncation and 413 are handled, input is capped", () => {
   const html = readFileSync(new URL("../1-index.html", import.meta.url), "utf8");
-  assert.ok(html.includes("תשובה מבסיס הידע המובנה — ה-AI אינו זמין כרגע"), "KB fallback label");
+  assert.ok(html.includes("fallbackAnswer") && html.includes("browser_network_error"), "shared labelled fallback");
   assert.ok(html.includes("d.truncated"), "truncated replies detected");
   assert.ok(html.includes("התשובה נקטעה באמצע"), "truncated replies labelled");
   assert.ok(html.includes("r.status===413"), "over-long message handled explicitly");
