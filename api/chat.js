@@ -1,3 +1,4 @@
+import { fallbackAnswer } from "../fallback.js";
 import { needsLiveResearch, buildSearchQuery, searchWeb, isUnknownDatePassportQuery, directAuthoritativeUnknownDateSources, isHotelProximityQuery, filterProximitySources, isHotelRecommendationQuery, filterHotelRecommendationSources, ensureOwnerTravelorSource } from "../research.js";
 
 function answerBasis(researchStatus, sources = []) {
@@ -20,7 +21,6 @@ export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "method_not_allowed" });
 
   const apiKeys = [process.env.GEMINI_API_KEY, process.env.GEMINI_API_KEY_BACKUP].filter(Boolean);
-  if (!apiKeys.length) return res.status(503).json({ error: "ai_not_configured" });
 
   let body = req.body;
   if (typeof body === "string") {
@@ -33,6 +33,8 @@ export default async function handler(req, res) {
     const reply = PROMPT_INJECTION_REPLY;
     return res.status(200).json({ reply, researchStatus: "blocked_prompt_injection", basis: "safety", sources: [] });
   }
+
+  if (!apiKeys.length) return res.status(200).json(fallbackAnswer(prepared.messages, "ai_not_configured"));
 
   const model = process.env.GEMINI_MODEL || DEFAULT_MODEL;
   let sources = [];
@@ -57,9 +59,7 @@ export default async function handler(req, res) {
     result = await callGemini({ apiKey: apiKeys[1], model, messages: prepared.messages, sources });
   }
   if (!result.ok) {
-    const payload = { error: result.error };
-    if (result.upstreamStatus) payload.status = result.upstreamStatus;
-    return res.status(result.status).json(payload);
+    return res.status(200).json(fallbackAnswer(prepared.messages, result.error));
   }
   return res.status(200).json({ reply: result.reply, ...(result.truncated ? { truncated: true } : {}), researchStatus, basis: answerBasis(researchStatus, sources), sources: sources.map(({ title, url, sourceType, sourceLabel }) => ({ title, url, sourceType, ...(sourceLabel ? { sourceLabel } : {}) })) });
 }

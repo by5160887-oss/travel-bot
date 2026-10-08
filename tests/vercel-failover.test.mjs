@@ -45,7 +45,7 @@ test("Vercel chat retries quota and availability failures with the backup key", 
   }
 });
 
-test("Vercel chat leaves non-quota errors to the existing client fallback", async () => {
+test("Vercel chat provides a shared safe fallback on non-quota provider errors", async () => {
   await withKeys("primary", "backup", async () => {
     const realFetch = globalThis.fetch;
     const keys = [];
@@ -56,7 +56,8 @@ test("Vercel chat leaves non-quota errors to the existing client fallback", asyn
     try {
       const res = makeRes();
       await handler(makeReq(), res);
-      assert.equal(res.code, 502);
+      assert.equal(res.code, 200);
+      assert.equal(res.payload.researchStatus, "deterministic_fallback");
       assert.deepEqual(keys, ["primary"]);
     } finally { globalThis.fetch = realFetch; }
   });
